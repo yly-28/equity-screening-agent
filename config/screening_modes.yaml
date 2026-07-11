@@ -1,0 +1,36 @@
+screening_modes:
+  balanced:
+    weights:
+      momentum: 0.25
+      quality: 0.25
+      valuation: 0.20
+      risk: 0.15
+      sector_strength: 0.15
+
+  growth:
+    weights:
+      momentum: 0.35
+      quality: 0.25
+      valuation: 0.10
+      risk: 0.10
+      sector_strength: 0.20
+
+  value:
+    weights:
+      momentum: 0.10
+      quality: 0.25
+      valuation: 0.35
+      risk: 0.20
+      sector_strength: 0.10
+
+  low_risk:
+    weights:
+      momentum: 0.15
+      quality: 0.25
+      valuation: 0.15
+      risk: 0.35
+      sector_strength: 0.10
+
+notes:
+  - These weights are provisional until field coverage and sector comparability are validated.
+  - Scores must renormalize over available factors instead of treating missing values as zero.

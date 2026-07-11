@@ -1,0 +1,24 @@
+{
+  "run_timestamp_utc": "2026-07-11T05:49:09+00:00",
+  "as_of": "2026-07-11",
+  "market_start": "2025-06-06",
+  "market_end": "2026-07-11",
+  "universe_source": "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies",
+  "universe_count": 503,
+  "universe_sector_count": 11,
+  "sample_size": 22,
+  "sample_sector_count": 11,
+  "market_success_count": 22,
+  "market_summary_success_count": 22,
+  "sec_fetch_success_count": 22,
+  "fundamental_core_success_count": 22,
+  "latest_market_data_date": "2026-07-10",
+  "median_fundamental_age_days": 192,
+  "max_fundamental_age_days": 376,
+  "fcf_missing_tickers": [
+    "JPM",
+    "PLD",
+    "NEE"
+  ],
+  "benchmark_error": null
+}

@@ -1,0 +1,182 @@
+contract:
+  version: 1.0.0
+  status: frozen_pending_full_market_coverage
+  row_grain: one row per security per screening as-of date
+  primary_key:
+    - as_of_date
+    - ticker
+  universe: current_sp500
+  purpose: cross-sectional screening, not historical constituent backtesting
+
+providers:
+  universe: wikipedia_sp500_table
+  market: twelve_data_time_series
+  fundamentals: sec_companyfacts
+  benchmark: SPY via twelve_data_time_series
+
+identity_fields:
+  ticker: {dtype: string, required: true}
+  company_name: {dtype: string, required: true}
+  sector: {dtype: string, required: true}
+  industry: {dtype: string, required: true}
+  cik: {dtype: string, required: true}
+
+provenance_fields:
+  as_of_date: {dtype: date, required: true}
+  market_data_source: {dtype: string, required: true}
+  price_data_end: {dtype: date, required: true}
+  market_data_age_days: {dtype: integer, required: true}
+  fundamental_data_source: {dtype: string, required: true}
+  fundamental_period_end: {dtype: date, required: true}
+  fundamental_filed_date: {dtype: date, required: true}
+  fundamental_age_days: {dtype: integer, required: true}
+  data_quality_flags: {dtype: list_string, required: true}
+
+market_fields:
+  price:
+    dtype: float
+    unit: USD
+    required: true
+    source: twelve_data
+    adjustment: all
+    invalid_if: nonpositive
+  average_volume_20d:
+    dtype: float
+    unit: shares
+    required: true
+    score_direction: context
+  return_1m:
+    dtype: float
+    unit: decimal_return
+    required: true
+    score_direction: higher
+  return_3m:
+    dtype: float
+    unit: decimal_return
+    required: true
+    score_direction: higher
+  return_6m:
+    dtype: float
+    unit: decimal_return
+    required: true
+    score_direction: higher
+  volatility_20d:
+    dtype: float
+    unit: annualized_decimal
+    required: true
+    score_direction: lower
+  volatility_60d:
+    dtype: float
+    unit: annualized_decimal
+    required: true
+    score_direction: lower
+  max_drawdown_1y:
+    dtype: float
+    unit: decimal_return
+    required: true
+    score_direction: higher
+  ma20_gap:
+    dtype: float
+    unit: decimal_ratio
+    required: true
+    score_direction: higher
+  ma50_gap:
+    dtype: float
+    unit: decimal_ratio
+    required: true
+    score_direction: higher
+  volume_trend:
+    dtype: float
+    unit: decimal_ratio
+    required: false
+    score_direction: higher
+  relative_strength_3m:
+    dtype: float
+    unit: excess_decimal_return
+    required: true
+    score_direction: higher
+  beta_1y:
+    dtype: float
+    unit: ratio
+    required: true
+    score_direction: lower
+
+fundamental_fields:
+  annual_revenue:
+    dtype: float
+    unit: USD
+    required: true
+    source: sec_companyfacts
+    scoring_use: denominator_and_audit
+  annual_net_income:
+    dtype: float
+    unit: USD
+    required: true
+    source: sec_companyfacts
+    scoring_use: denominator_and_audit
+  revenue_growth:
+    dtype: float
+    unit: decimal_ratio
+    required: true
+    score_direction: higher
+    comparison_group: sector
+  profit_margin:
+    dtype: float
+    unit: decimal_ratio
+    required: true
+    score_direction: higher
+    comparison_group: sector
+    review_if: absolute_value_above_1
+  roe:
+    dtype: float
+    unit: decimal_ratio
+    required: false
+    score_direction: higher
+    comparison_group: sector
+    invalid_if: stockholders_equity_lte_0
+  liabilities_to_equity:
+    dtype: float
+    unit: ratio
+    required: false
+    score_direction: lower
+    comparison_group: sector
+    invalid_if: stockholders_equity_lte_0
+  annual_free_cash_flow:
+    dtype: float
+    unit: USD
+    required: false
+    score_direction: higher
+    comparison_group: sector
+    not_required_for:
+      - Financials
+      - Real Estate
+      - Utilities
+  shares_outstanding:
+    dtype: float
+    unit: shares
+    required: false
+    invalid_if: stale_missing_or_below_100000
+
+derived_optional_fields:
+  market_cap_proxy:
+    formula: price * shares_outstanding
+    required: false
+    missing_policy: remain_null
+  annual_pe_proxy:
+    formula: market_cap_proxy / annual_net_income
+    required: false
+    valid_if: annual_net_income_gt_0
+    missing_policy: remain_null
+
+missing_data_policy:
+  required_market_field: exclude_security_from_ranking
+  optional_component: keep_null_and_renormalize_weights
+  forbidden_imputation:
+    - fill_missing_with_zero
+    - global_mean_imputation_for_scoring
+
+model_preprocessing:
+  grouping: sector
+  percentile_method: rank_percentile
+  winsorization: sector_5th_95th_percentile
+  minimum_valid_observations_per_sector: 10

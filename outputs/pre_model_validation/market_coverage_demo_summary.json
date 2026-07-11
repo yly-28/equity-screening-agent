@@ -1,0 +1,13 @@
+{
+  "run_timestamp_utc": "2026-07-11T06:55:36+00:00",
+  "scope": "demo",
+  "provider": "twelve_data",
+  "adjustment": "all",
+  "as_of": "2026-07-11",
+  "requested_count": 1,
+  "success_count": 1,
+  "usable_count": 1,
+  "success_rate": 1.0,
+  "usable_rate": 1.0,
+  "exit_criterion_met": true
+}

@@ -1,0 +1,24 @@
+universes:
+  sp500:
+    enabled: true
+    description: Large-cap U.S. equities used for the initial implementation.
+    source: wikipedia
+    source_url: https://en.wikipedia.org/wiki/List_of_S%26P_500_companies
+    cache_file: data/raw/sp500_universe.csv
+    minimum_price: 5.0
+    minimum_average_volume: 500000
+
+  custom:
+    enabled: true
+    description: User-supplied ticker list using the same normalized schema.
+    source: user_input
+    minimum_price: 5.0
+    minimum_average_volume: null
+
+  nasdaq100:
+    enabled: false
+    description: Future extension; no implementation is planned for the MVP.
+
+  russell1000:
+    enabled: false
+    description: Future extension; no implementation is planned for the MVP.

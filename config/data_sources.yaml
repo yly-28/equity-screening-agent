@@ -1,0 +1,35 @@
+data_sources:
+  universe:
+    primary: wikipedia_sp500_table
+    cache: data/raw/sp500_universe.csv
+    notes: Provides ticker, company, GICS sector, industry, and CIK.
+
+  market_prices:
+    primary: twelve_data_time_series
+    required_environment_variable: TWELVE_DATA_API_KEY
+    cache: data/cache/twelve_data
+    frequency: daily
+    adjustment: all
+    limitations:
+      - The free plan currently allows 8 API credits per minute and 800 per day.
+      - A full S&P 500 refresh must be resumable and rate limited.
+      - Market data remains latest-available daily data, not a real-time entitlement.
+    rejected_prototype_sources:
+      nasdaq_web_json: Automated capture is prohibited by Nasdaq website terms.
+      yahoo_finance: Anonymous requests returned HTTP 429 during validation.
+      stooq_csv: Browser verification was returned instead of CSV.
+
+  fundamentals:
+    primary: sec_companyfacts
+    cache: data/cache/sec
+    frequency: filing_based
+    limitations:
+      - Company Facts contains standardized filing facts, not analyst estimates.
+      - Forward PE and analyst targets are outside the initial reliable dataset.
+      - Accounting tags and economic meaning vary by sector.
+
+runtime_policy:
+  show_source_and_timestamp: true
+  cache_all_network_responses: true
+  require_missingness_report: true
+  sec_user_agent_environment_variable: SEC_USER_AGENT

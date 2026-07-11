@@ -847,14 +847,16 @@ screening_modes:
 
 ### Initial Data Sources
 
-Recommended for prototype:
+Validated for the prototype after the 2026-07-11 feasibility test:
 
 ```text
-yfinance
-Wikipedia S&P 500 list
-Public company metadata
-Optional: manually cached CSV files
+Wikipedia S&P 500 constituents table: universe, company, GICS sector, industry, CIK
+Twelve Data API: adjusted latest-available daily OHLCV
+SEC EDGAR Company Facts: filing-based annual accounting fundamentals
+Local CSV / Parquet / JSON cache: reproducible analysis and rate-limit protection
 ```
+
+Nasdaq website capture was rejected after reviewing its legal terms. Yahoo Finance returned HTTP 429 and Stooq returned browser verification. These sources are not MVP dependencies.
 
 ### Data Types
 
@@ -869,6 +871,17 @@ historical daily prices
 latest price
 volume
 basic fundamental metrics
+```
+
+Data claims and fields must match source capabilities:
+
+```text
+Use "latest available daily data," not real-time data.
+Show the market-data date and fundamental filing period.
+Calculate beta from stock and SPY returns.
+Request Twelve Data daily prices with `adjust=all` and record the adjustment mode.
+Defer forward PE and analyst estimates until a reliable source is selected.
+Use sector-relative, missing-aware accounting scores.
 ```
 
 Optional:
@@ -888,10 +901,12 @@ Recommended local files:
 
 ```text
 data/raw/sp500_universe.csv
-data/raw/market_prices.parquet
-data/raw/fundamentals.parquet
-data/processed/features.parquet
+data/cache/twelve_data/*.json
+data/cache/sec/*.json
+data/processed/data_feasibility_market_prices.parquet
+data/processed/data_feasibility_unified_features.parquet
 data/processed/rankings.csv
+outputs/data_feasibility/data_quality_report.md
 ```
 
 ---
@@ -951,7 +966,9 @@ equity-screening-agent/
 │
 ├── config/
 │   ├── universes.yaml
-│   └── screening_modes.yaml
+│   ├── screening_modes.yaml
+│   ├── data_sources.yaml
+│   └── data_contract.yaml
 │
 ├── data/
 │   ├── raw/
@@ -962,8 +979,12 @@ equity-screening-agent/
 │   ├── __init__.py
 │   ├── universe.py
 │   ├── market_data.py
+│   ├── twelve_data.py
 │   ├── fundamentals.py
 │   ├── features.py
+│   ├── market_coverage.py
+│   ├── sec_coverage.py
+│   ├── unified_data.py
 │   ├── scoring.py
 │   ├── screening.py
 │   ├── sector_analysis.py
@@ -986,9 +1007,10 @@ equity-screening-agent/
 │   └── prompts.py
 │
 ├── notebooks/
-│   └── eda_and_scoring_prototype.ipynb
+│   └── 01_data_feasibility.ipynb
 │
 ├── outputs/
+│   ├── pre_model_validation/
 │   ├── rankings/
 │   ├── reports/
 │   └── screenshots/
@@ -1000,6 +1022,7 @@ equity-screening-agent/
 │   └── test_screening.py
 │
 ├── requirements.txt
+├── DATA_QUALITY_POLICY.md
 ├── README.md
 └── PROJECT_SPEC.md
 ```
@@ -1275,15 +1298,15 @@ Portfolio-ready project
 The safest implementation order is:
 
 ```text
-1. Data pipeline
-2. Analytics Engine
-3. Preference-aware scoring
-4. Ranking output
-5. Explanation generation
-6. Streamlit dashboard
-7. MCP tools
-8. AI Agent
-9. Research brief generation
+1. Data feasibility and provider validation
+2. Full-universe market coverage test
+3. Sector-level SEC fundamental coverage test
+4. Unified data contract and quality rules
+5. Sector-relative, missing-aware factor scoring
+6. Preference-aware ranking and explanations
+7. Minimal Streamlit screener and stock detail views
+8. MCP tools over stable analytical functions
+9. AI Agent and research brief generation
 10. Final report
 ```
 

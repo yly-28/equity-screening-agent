@@ -1,0 +1,155 @@
+sector,field,available_count,sample_count,missing_rate
+Communication Services,annual_revenue,8,8,0.0
+Communication Services,annual_net_income,8,8,0.0
+Communication Services,stockholders_equity,8,8,0.0
+Communication Services,total_assets,8,8,0.0
+Communication Services,total_liabilities,8,8,0.0
+Communication Services,annual_operating_cash_flow,8,8,0.0
+Communication Services,annual_capex,7,8,0.125
+Communication Services,annual_free_cash_flow,7,8,0.125
+Communication Services,annual_diluted_eps,8,8,0.0
+Communication Services,shares_outstanding,2,8,0.75
+Communication Services,revenue_growth,8,8,0.0
+Communication Services,profit_margin,8,8,0.0
+Communication Services,roe,8,8,0.0
+Communication Services,liabilities_to_equity,8,8,0.0
+Consumer Discretionary,annual_revenue,8,8,0.0
+Consumer Discretionary,annual_net_income,8,8,0.0
+Consumer Discretionary,stockholders_equity,8,8,0.0
+Consumer Discretionary,total_assets,8,8,0.0
+Consumer Discretionary,total_liabilities,8,8,0.0
+Consumer Discretionary,annual_operating_cash_flow,8,8,0.0
+Consumer Discretionary,annual_capex,8,8,0.0
+Consumer Discretionary,annual_free_cash_flow,8,8,0.0
+Consumer Discretionary,annual_diluted_eps,8,8,0.0
+Consumer Discretionary,shares_outstanding,8,8,0.0
+Consumer Discretionary,revenue_growth,8,8,0.0
+Consumer Discretionary,profit_margin,8,8,0.0
+Consumer Discretionary,roe,7,8,0.125
+Consumer Discretionary,liabilities_to_equity,7,8,0.125
+Consumer Staples,annual_revenue,8,8,0.0
+Consumer Staples,annual_net_income,8,8,0.0
+Consumer Staples,stockholders_equity,8,8,0.0
+Consumer Staples,total_assets,8,8,0.0
+Consumer Staples,total_liabilities,8,8,0.0
+Consumer Staples,annual_operating_cash_flow,8,8,0.0
+Consumer Staples,annual_capex,8,8,0.0
+Consumer Staples,annual_free_cash_flow,8,8,0.0
+Consumer Staples,annual_diluted_eps,8,8,0.0
+Consumer Staples,shares_outstanding,7,8,0.125
+Consumer Staples,revenue_growth,8,8,0.0
+Consumer Staples,profit_margin,8,8,0.0
+Consumer Staples,roe,8,8,0.0
+Consumer Staples,liabilities_to_equity,8,8,0.0
+Energy,annual_revenue,8,8,0.0
+Energy,annual_net_income,8,8,0.0
+Energy,stockholders_equity,8,8,0.0
+Energy,total_assets,8,8,0.0
+Energy,total_liabilities,8,8,0.0
+Energy,annual_operating_cash_flow,8,8,0.0
+Energy,annual_capex,7,8,0.125
+Energy,annual_free_cash_flow,7,8,0.125
+Energy,annual_diluted_eps,8,8,0.0
+Energy,shares_outstanding,8,8,0.0
+Energy,revenue_growth,8,8,0.0
+Energy,profit_margin,8,8,0.0
+Energy,roe,8,8,0.0
+Energy,liabilities_to_equity,8,8,0.0
+Financials,annual_revenue,8,8,0.0
+Financials,annual_net_income,8,8,0.0
+Financials,stockholders_equity,8,8,0.0
+Financials,total_assets,8,8,0.0
+Financials,total_liabilities,8,8,0.0
+Financials,annual_operating_cash_flow,8,8,0.0
+Financials,annual_capex,6,8,0.25
+Financials,annual_free_cash_flow,6,8,0.25
+Financials,annual_diluted_eps,7,8,0.125
+Financials,shares_outstanding,6,8,0.25
+Financials,revenue_growth,8,8,0.0
+Financials,profit_margin,8,8,0.0
+Financials,roe,8,8,0.0
+Financials,liabilities_to_equity,8,8,0.0
+Health Care,annual_revenue,8,8,0.0
+Health Care,annual_net_income,8,8,0.0
+Health Care,stockholders_equity,8,8,0.0
+Health Care,total_assets,8,8,0.0
+Health Care,total_liabilities,8,8,0.0
+Health Care,annual_operating_cash_flow,8,8,0.0
+Health Care,annual_capex,8,8,0.0
+Health Care,annual_free_cash_flow,8,8,0.0
+Health Care,annual_diluted_eps,8,8,0.0
+Health Care,shares_outstanding,7,8,0.125
+Health Care,revenue_growth,8,8,0.0
+Health Care,profit_margin,8,8,0.0
+Health Care,roe,8,8,0.0
+Health Care,liabilities_to_equity,8,8,0.0
+Industrials,annual_revenue,8,8,0.0
+Industrials,annual_net_income,8,8,0.0
+Industrials,stockholders_equity,8,8,0.0
+Industrials,total_assets,8,8,0.0
+Industrials,total_liabilities,8,8,0.0
+Industrials,annual_operating_cash_flow,8,8,0.0
+Industrials,annual_capex,8,8,0.0
+Industrials,annual_free_cash_flow,8,8,0.0
+Industrials,annual_diluted_eps,8,8,0.0
+Industrials,shares_outstanding,8,8,0.0
+Industrials,revenue_growth,8,8,0.0
+Industrials,profit_margin,8,8,0.0
+Industrials,roe,8,8,0.0
+Industrials,liabilities_to_equity,8,8,0.0
+Information Technology,annual_revenue,8,8,0.0
+Information Technology,annual_net_income,8,8,0.0
+Information Technology,stockholders_equity,8,8,0.0
+Information Technology,total_assets,8,8,0.0
+Information Technology,total_liabilities,8,8,0.0
+Information Technology,annual_operating_cash_flow,8,8,0.0
+Information Technology,annual_capex,8,8,0.0
+Information Technology,annual_free_cash_flow,8,8,0.0
+Information Technology,annual_diluted_eps,8,8,0.0
+Information Technology,shares_outstanding,7,8,0.125
+Information Technology,revenue_growth,8,8,0.0
+Information Technology,profit_margin,8,8,0.0
+Information Technology,roe,8,8,0.0
+Information Technology,liabilities_to_equity,8,8,0.0
+Materials,annual_revenue,8,8,0.0
+Materials,annual_net_income,8,8,0.0
+Materials,stockholders_equity,8,8,0.0
+Materials,total_assets,8,8,0.0
+Materials,total_liabilities,8,8,0.0
+Materials,annual_operating_cash_flow,8,8,0.0
+Materials,annual_capex,8,8,0.0
+Materials,annual_free_cash_flow,8,8,0.0
+Materials,annual_diluted_eps,8,8,0.0
+Materials,shares_outstanding,8,8,0.0
+Materials,revenue_growth,8,8,0.0
+Materials,profit_margin,8,8,0.0
+Materials,roe,8,8,0.0
+Materials,liabilities_to_equity,8,8,0.0
+Real Estate,annual_revenue,8,8,0.0
+Real Estate,annual_net_income,8,8,0.0
+Real Estate,stockholders_equity,8,8,0.0
+Real Estate,total_assets,8,8,0.0
+Real Estate,total_liabilities,8,8,0.0
+Real Estate,annual_operating_cash_flow,8,8,0.0
+Real Estate,annual_capex,5,8,0.375
+Real Estate,annual_free_cash_flow,5,8,0.375
+Real Estate,annual_diluted_eps,8,8,0.0
+Real Estate,shares_outstanding,8,8,0.0
+Real Estate,revenue_growth,8,8,0.0
+Real Estate,profit_margin,8,8,0.0
+Real Estate,roe,7,8,0.125
+Real Estate,liabilities_to_equity,7,8,0.125
+Utilities,annual_revenue,8,8,0.0
+Utilities,annual_net_income,8,8,0.0
+Utilities,stockholders_equity,8,8,0.0
+Utilities,total_assets,8,8,0.0
+Utilities,total_liabilities,8,8,0.0
+Utilities,annual_operating_cash_flow,8,8,0.0
+Utilities,annual_capex,7,8,0.125
+Utilities,annual_free_cash_flow,7,8,0.125
+Utilities,annual_diluted_eps,8,8,0.0
+Utilities,shares_outstanding,8,8,0.0
+Utilities,revenue_growth,8,8,0.0
+Utilities,profit_margin,8,8,0.0
+Utilities,roe,8,8,0.0
+Utilities,liabilities_to_equity,8,8,0.0

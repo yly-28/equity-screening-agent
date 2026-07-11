@@ -1,0 +1,20 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Downloaded source data and caches are reproducible and may become large.
+data/raw/*
+data/cache/*
+data/processed/*
+
+# Do not redistribute provider-level or security-level generated data.
+outputs/data_feasibility/unified_features_sample.csv
+outputs/pre_model_validation/market_coverage_*.csv
+outputs/pre_model_validation/sec_validation_sample.csv
+
+# Keep output reports, but ignore common temporary files.
+*.tmp

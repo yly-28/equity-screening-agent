@@ -1,0 +1,7 @@
+source,role,success_count,attempt_count,success_rate,observation
+wikipedia_sp500,universe,1,1,1.0,"503 rows with GICS sector, industry, and CIK"
+nasdaq_web_json,daily_market_data,22,22,1.0,daily OHLCV available; endpoint is undocumented and closes are not labeled adjusted
+nasdaq_web_json,market_summary,22,22,1.0,market cap and classification fields tested
+sec_companyfacts,annual_fundamentals,22,22,1.0,authoritative filings; cross-company tags require normalization
+yahoo_chart,optional_market_fallback,0,1,0.0,HTTP 429; anonymous requests are rate limited
+stooq_csv,optional_market_fallback,0,1,0.0,browser verification returned instead of CSV
