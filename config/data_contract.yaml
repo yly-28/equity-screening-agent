@@ -1,6 +1,6 @@
 contract:
   version: 1.0.0
-  status: frozen_pending_full_market_coverage
+  status: validated_pending_feature_matrix
   row_grain: one row per security per screening as-of date
   primary_key:
     - as_of_date

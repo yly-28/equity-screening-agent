@@ -6,7 +6,7 @@ import argparse
 import json
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional
 
 import pandas as pd
 
@@ -130,64 +130,6 @@ def _sector_coverage(rows: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
-def _markdown_table(frame: pd.DataFrame, columns: Sequence[str]) -> str:
-    lines = [
-        "| " + " | ".join(columns) + " |",
-        "| " + " | ".join("---" for _ in columns) + " |",
-    ]
-    for _, row in frame.iterrows():
-        values: List[str] = []
-        for column in columns:
-            value = row[column]
-            if column == "missing_rate":
-                values.append(f"{float(value):.1%}")
-            else:
-                values.append(str(value).replace("|", "/"))
-        lines.append("| " + " | ".join(values) + " |")
-    return "\n".join(lines)
-
-
-def _build_report(
-    summary: Dict[str, object],
-    overall: pd.DataFrame,
-    sector: pd.DataFrame,
-) -> str:
-    sector_gaps = sector[sector["missing_rate"] >= 0.25].sort_values(
-        ["field", "sector"]
-    )
-    return f"""# SEC Fundamental Coverage Report
-
-Generated: {summary['run_timestamp_utc']}<br>
-Sample: {summary['sample_count']} current S&P 500 securities, {summary['per_sector']} per sector
-
-## Result
-
-- SEC retrieval success: {summary['sec_fetch_success_count']}/{summary['sample_count']}
-- Core extraction success: {summary['core_success_count']}/{summary['sample_count']}
-- Median fundamental age: {summary['median_fundamental_age_days']} days
-- Oldest fundamental age: {summary['max_fundamental_age_days']} days
-
-## Overall Field Coverage
-
-{_markdown_table(overall, ('field', 'available_count', 'sample_count', 'missing_rate', 'status'))}
-
-## Material Sector Gaps
-
-The table lists sector/field combinations with at least 25% missing values.
-
-{_markdown_table(sector_gaps, ('sector', 'field', 'available_count', 'sample_count', 'missing_rate')) if not sector_gaps.empty else 'No material sector gaps in this sample.'}
-
-## Model Input Decisions
-
-- Revenue growth, profit margin, ROE, and liabilities-to-equity may enter the general quality layer only if their final coverage remains strong.
-- Free cash flow is optional. It must not penalize financials, REITs, or utilities when unavailable or economically inappropriate.
-- Missing values remain null; factor weights are renormalized over applicable fields.
-- Every derived ratio carries its fiscal period end and source tag for auditability.
-- Financials and real estate require sector-specific interpretation even when a numeric value exists.
-- The current-universe sample is suitable for a cross-sectional screener, not a survivorship-bias-free historical backtest.
-"""
-
-
 def run_sec_coverage(
     project_root: Optional[Path] = None,
     as_of: Optional[date] = None,
@@ -262,19 +204,16 @@ def run_sec_coverage(
     results.to_csv(output_dir / "sec_validation_sample.csv", index=False)
     overall.to_csv(output_dir / "sec_field_coverage.csv", index=False)
     sector.to_csv(output_dir / "sec_sector_coverage.csv", index=False)
-    (output_dir / "sec_coverage_summary.json").write_text(
+    summary_path = output_dir / "sec_coverage_summary.json"
+    summary_path.write_text(
         json.dumps(summary, indent=2), encoding="utf-8"
-    )
-    report_path = output_dir / "sec_fundamental_coverage_report.md"
-    report_path.write_text(
-        _build_report(summary, overall, sector), encoding="utf-8"
     )
     return {
         "results": results,
         "overall_coverage": overall,
         "sector_coverage": sector,
         "summary": summary,
-        "report_path": report_path,
+        "summary_path": summary_path,
     }
 
 
@@ -290,7 +229,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         refresh=args.refresh,
     )
     print(json.dumps(result["summary"], indent=2))
-    print(f"Report: {result['report_path']}")
+    print(f"Summary: {result['summary_path']}")
     return 0
 
 

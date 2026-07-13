@@ -90,7 +90,7 @@ class FeasibilityResult:
     coverage: pd.DataFrame
     source_probe: pd.DataFrame
     summary: Dict[str, object]
-    report_path: Path
+    summary_path: Path
 
 
 def _probe_optional_sources(
@@ -182,107 +182,6 @@ def _coverage_table(features: pd.DataFrame) -> pd.DataFrame:
                 }
             )
     return pd.DataFrame(records)
-
-
-def _markdown_table(frame: pd.DataFrame, columns: Sequence[str]) -> str:
-    headers = list(columns)
-    lines = [
-        "| " + " | ".join(headers) + " |",
-        "| " + " | ".join("---" for _ in headers) + " |",
-    ]
-    for _, row in frame.iterrows():
-        values: List[str] = []
-        for column in headers:
-            value = row[column]
-            if isinstance(value, float) and column in {"missing_rate", "success_rate"}:
-                values.append(f"{value:.1%}")
-            else:
-                values.append(str(value).replace("|", "/"))
-        lines.append("| " + " | ".join(values) + " |")
-    return "\n".join(lines)
-
-
-def _build_report(
-    summary: Dict[str, object],
-    coverage: pd.DataFrame,
-    source_probe: pd.DataFrame,
-) -> str:
-    weak = coverage.loc[coverage["status"] == "weak", ["field", "missing_rate"]]
-    weak_text = (
-        ", ".join(
-            f"{row.field} ({row.missing_rate:.0%} missing)"
-            for row in weak.itertuples(index=False)
-        )
-        if not weak.empty
-        else "none in the tested field set"
-    )
-    fcf_missing = summary.get("fcf_missing_tickers") or []
-    fcf_note = ", ".join(str(ticker) for ticker in fcf_missing) or "none"
-
-    return f"""# Data Feasibility Validation Report
-
-Generated: {summary['run_timestamp_utc']}<br>
-Market-data window: {summary['market_start']} to {summary['market_end']}<br>
-Sample: {summary['sample_size']} S&P 500 securities across {summary['sample_sector_count']} sectors
-
-## Executive Decision
-
-The initial sample proved that the planned fields can be calculated, but Nasdaq website capture was subsequently rejected after reviewing its legal terms. This report is retained as historical feasibility evidence only. Current market validation uses the documented Twelve Data API; SEC Company Facts remains the approved fundamental source.
-
-The product should be described as using **latest available daily market data**, not real-time data. The first scoring model must be missing-aware and sector-relative because SEC accounting tags and metric meaning are not uniform across sectors.
-
-## Run Summary
-
-- Universe rows: {summary['universe_count']}
-- Universe sectors: {summary['universe_sector_count']}
-- Nasdaq historical-price success: {summary['market_success_count']}/{summary['sample_size']}
-- Nasdaq summary success: {summary['market_summary_success_count']}/{summary['sample_size']}
-- SEC Company Facts retrieval success: {summary['sec_fetch_success_count']}/{summary['sample_size']}
-- SEC core accounting extraction success: {summary['fundamental_core_success_count']}/{summary['sample_size']}
-- Latest market-data date: {summary['latest_market_data_date']}
-- Median fundamental age: {summary['median_fundamental_age_days']} days
-- Oldest fundamental age: {summary['max_fundamental_age_days']} days
-- Weak fields in this sample: {weak_text}
-
-## Source Validation
-
-{_markdown_table(source_probe, ('source', 'role', 'success_count', 'attempt_count', 'success_rate', 'observation'))}
-
-## Field Coverage
-
-{_markdown_table(coverage, ('group', 'field', 'available_count', 'sample_count', 'missing_rate', 'status'))}
-
-## Observed Limitations
-
-1. Nasdaq sample data is legacy evidence and must not be refreshed or used as the production provider.
-2. Twelve Data is the approved market source and requires a personal API key for full-universe validation.
-3. SEC Company Facts is authoritative filing data, but tags differ across issuers and sectors. Financial companies and REITs require sector-aware feature definitions.
-4. SEC data does not provide forward PE or analyst estimates. These fields are deferred from the MVP rather than filled with unreliable scraped values.
-5. Fundamental timestamps are filing-based and older than daily market timestamps. Both dates must be shown in the UI and MCP responses.
-6. Free cash flow was unavailable for {fcf_note}. It should be optional or replaced with sector-appropriate measures for financials, REITs, and utilities.
-
-## Project Adjustments
-
-- Make Wikipedia + Twelve Data + SEC the approved prototype stack.
-- Replace the original generic `debt_to_equity` target with the clearly labeled `liabilities_to_equity` proxy until debt-tag mapping is validated.
-- Calculate beta from stock and SPY daily returns instead of relying on a vendor metadata field.
-- Use annual PE only as a labeled proxy derived from market capitalization and annual net income; do not call it forward PE.
-- Score stocks within sectors where accounting comparability matters, then combine those scores with market-based factors.
-- Renormalize factor weights over available inputs; never convert missing fundamentals to zero scores.
-
-## Adjusted Development Order
-
-1. Harden the provider interfaces, caching, timestamps, and data-quality flags.
-2. Configure a Twelve Data key and run the resumable full-universe audit.
-3. Require at least 95% usable market coverage before scoring.
-4. Expand SEC validation by sector and finalize the reliable fundamental feature set.
-5. Build sector-relative, missing-aware factor scores and validate ranking stability.
-6. Add explanations and a simple Streamlit screener.
-7. Expose stable analytical functions through MCP.
-8. Add the AI agent only after tool outputs and data contracts are stable.
-
-This validation supports proceeding with the project, but with a narrower and more defensible data claim: an explainable daily equity research screener built on cached public data, not a real-time market-data product.
-"""
 
 
 def run_data_feasibility(
@@ -477,13 +376,9 @@ def run_data_feasibility(
     coverage.to_csv(output_dir / "field_coverage.csv", index=False)
     source_probe.to_csv(output_dir / "source_probe.csv", index=False)
     features.to_csv(output_dir / "unified_features_sample.csv", index=False)
-    (output_dir / "run_summary.json").write_text(
+    summary_path = output_dir / "run_summary.json"
+    summary_path.write_text(
         json.dumps(summary, indent=2, default=str),
-        encoding="utf-8",
-    )
-    report_path = output_dir / "data_quality_report.md"
-    report_path.write_text(
-        _build_report(summary, coverage, source_probe),
         encoding="utf-8",
     )
 
@@ -493,7 +388,7 @@ def run_data_feasibility(
         coverage=coverage,
         source_probe=source_probe,
         summary=summary,
-        report_path=report_path,
+        summary_path=summary_path,
     )
 
 
@@ -514,7 +409,7 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         refresh=args.refresh,
     )
     print(json.dumps(result.summary, indent=2, default=str))
-    print(f"Report: {result.report_path}")
+    print(f"Summary: {result.summary_path}")
     return 0
 
 

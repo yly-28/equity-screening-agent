@@ -1,1481 +1,414 @@
-# AI Agent-Assisted U.S. Equity Screening System with MCP
+# Equity Screening Agent: Product and System Specification
 
-## 1. Project Overview
+## 1. Product Definition
 
-### Project Title
+### Title
 
 **AI Agent-Assisted U.S. Equity Screening System with MCP**
 
-### Subtitle
+### Positioning
 
-**A Preference-Aware, Universe-Agnostic Stock Screening Framework for Market Analysis and Investment Research Support**
+An explainable, preference-aware, universe-agnostic stock screening framework for market analysis and investment research support.
 
-### One-Sentence Summary
+The system helps users identify securities worth further research by combining latest-available daily market data, filing-based fundamentals, sector context, risk metrics, and configurable preferences. It returns rankings, factor breakdowns, risk notes, comparisons, and structured research briefs.
 
-This project builds a user-facing AI agent that uses MCP tools to screen U.S. equities based on current market data, fundamentals, sector trends, risk metrics, and user investment preferences, then generates interpretable rankings and analyst-style research briefs for further research.
+It is not:
 
----
+- a stock-price prediction model;
+- a trading bot or order-execution system;
+- a portfolio optimizer;
+- an automated financial adviser;
+- a source of guaranteed returns or unsupported buy/sell recommendations;
+- a tick-level or real-time market-data product.
 
-## 2. Project Goal
+Required wording:
 
-The goal of this project is to build a practical stock screening and market analysis system for retail investors and institutional analysts.
+> The system is designed as a decision-support and research-assistance tool, not as an automated trading system or financial advisory service.
 
-The system does **not** predict future stock prices and does **not** provide direct buy/sell recommendations.
+## 2. Users and Core Jobs
 
-Instead, it helps users answer questions such as:
+Primary users are students, retail investors, and analysts who need a reproducible first-pass research screen.
+
+The system should answer questions such as:
 
 - Which stocks are worth further research under current market conditions?
-- Which sectors look strong or weak?
-- Which stocks match a growth, value, balanced, or low-risk preference?
-- Why does a stock appear in the screening result?
-- What are the key strengths and risks of a stock?
+- Which sectors are relatively strong or weak?
+- Which stocks best match balanced, growth, value, or low-risk preferences?
+- Why does a stock rank highly or poorly?
+- What are the main strengths, risks, missing inputs, and next research questions?
+- How do several selected stocks compare under the same scoring framework?
 
-The project focuses on:
+Every user-facing claim must be grounded in normalized data, computed factors, or explicit quality flags. The agent must not invent financial analysis when tools return insufficient evidence.
 
-- Market analysis
-- Stock screening
-- User-preference-aware ranking
-- Factor-based explanation
-- AI-generated research briefs
-- MCP-based tool-calling architecture
+## 3. Design Principles
 
----
+### Analytical Core Before Agent
 
-## 3. Core Product Concept
+Build and validate the data pipeline, feature matrix, scoring model, ranking behavior, and structured explanations before adding Streamlit, MCP, or an AI agent.
 
-Users interact with the system through a dashboard or chat interface.
+### Universe-Agnostic Interfaces
 
-Example user queries:
-
-```text
-Find high-quality growth stocks today.
-Show undervalued stocks with strong fundamentals.
-Which sectors look strong right now?
-Find lower-risk large-cap stocks.
-Generate a research brief for the top 5 ranked stocks.
-Compare MSFT, NVDA, and AAPL.
-```
-
-The AI agent interprets the user intent, selects the appropriate stock universe and screening mode, calls MCP tools, and returns:
-
-- Personalized stock rankings
-- Score breakdowns
-- Market and sector insights
-- Stock-level explanations
-- Analyst-style research briefs
-- Risk notes and next-step research questions
-
----
-
-## 4. Key Design Principle
-
-### Universe-Agnostic Architecture
-
-The system should **not** be hardcoded for only S&P 500 stocks.
-
-S&P 500 is the default initial universe because it has better data quality, better liquidity, and more reliable fundamental information.
-
-However, the architecture must support future expansion to broader stock universes.
-
-The system should be designed as:
+The initial production universe is the current S&P 500, but functions must accept a universe identifier or ticker list:
 
 ```python
 screen_stocks(universe="sp500", mode="balanced", top_n=20)
 ```
 
-Not as:
+Do not create S&P-500-only analytical functions such as `screen_sp500_stocks()`.
 
-```python
-screen_sp500_stocks()
-```
+Initial support:
 
-This allows future support for:
+- `sp500`;
+- `custom` ticker list.
 
-- S&P 500
-- Nasdaq 100
-- Russell 1000
-- Small-cap opportunity pool
-- Custom ticker list
+Future extensions:
 
-The initial implementation can focus on S&P 500, but the architecture must be extensible.
+- Nasdaq 100;
+- Russell 1000;
+- a documented small-cap opportunity universe.
 
----
+### Explainability and Provenance
 
-## 5. Final System Architecture
+Every ranking row and tool response must expose the market-data date, fundamental period, filing date, source names, missing fields, quality flags, exclusion reason, and score breakdown when applicable.
+
+### Missing-Aware and Sector-Aware Analytics
+
+Missing values remain null. Optional factor weights are renormalized over available and economically applicable inputs. Accounting and valuation comparisons are sector-relative where cross-sector meaning is weak.
+
+## 4. Scope
+
+### MVP Must Have
+
+- Current S&P 500 and custom ticker-list support.
+- Resumable market and fundamental data pipelines with local caching.
+- Versioned unified feature matrix.
+- Momentum, quality, valuation, risk, and sector-strength scores.
+- Balanced, growth, value, and low-risk modes.
+- Preference-aware ranking with filters and score breakdowns.
+- Structured strengths, risks, and research-brief inputs.
+- Stock Screener and Stock Detail views.
+- MCP tools over stable analytical functions.
+- Research-only disclaimers and data-quality warnings.
+
+### Should Have
+
+- Agent chat grounded in MCP outputs.
+- Stock comparison.
+- Market and sector overviews.
+- Research brief generation.
+- Streamlit demonstration interface.
+
+### Nice to Have
+
+- Additional documented equity universes.
+- News or sentiment from an approved source.
+- Advanced visualizations.
+- Demo video.
+
+### Explicitly Deferred
+
+- Forward PE, analyst targets, ratings, and consensus estimates.
+- News and sentiment until a reliable source is approved.
+- Point-in-time historical constituent backtesting.
+- Automated trading, order execution, and portfolio optimization.
+
+## 5. Target Architecture
 
 ```text
 User
- ↓
-Streamlit Dashboard / Chat Interface
- ↓
-AI Agent Layer
- ├── Understands user intent
- ├── Detects investment preference
- ├── Selects screening mode
- └── Selects stock universe
- ↓
-MCP Tool Layer
- ├── Universe Tool
- ├── Market Data Tool
- ├── Fundamental Tool
- ├── Risk & Sector Tool
- ├── Preference-Aware Screening Tool
- └── Report Tool
- ↓
-Analytics Engine
- ├── Universe Filtering
- ├── Data Standardization
- ├── Feature Engineering
- ├── Factor Scoring
- ├── Dynamic Weight Adjustment
- ├── Stock Ranking
- └── Explanation Generation
- ↓
-Output Layer
- ├── Personalized Ranking Table
- ├── Market Overview
- ├── Sector Insights
- ├── Stock-Level Score Breakdown
- └── User-Specific Research Brief
+  -> Streamlit dashboard or chat
+  -> AI agent: intent, universe, mode, filters, tool selection
+  -> MCP tools: normalized analytical capabilities
+  -> Analytics engine: features, scores, ranking, explanations
+  -> Data layer: universe, adjusted market data, SEC fundamentals, cache
+  -> Outputs: rankings, details, comparisons, sector views, research briefs
 ```
 
----
-
-## 6. Main Components
-
-### 6.1 User Interface Layer
-
-The user interface can be built with Streamlit.
-
-Recommended pages:
-
-#### Page 1: Market Overview
-
-Shows:
-
-- Overall market condition
-- Major index movement
-- Strong and weak sectors
-- Market breadth
-- Top movers
-- Risk environment
-
-#### Page 2: Stock Screener
-
-Allows users to select:
-
-- Stock universe
-- Screening mode
-- Sector filter
-- Top N results
-- Minimum market cap
-- Minimum price
-- Minimum average volume
-
-Displays:
-
-- Ranking table
-- Final score
-- Factor scores
-- Sector
-- Company name
-- Risk level
-
-#### Page 3: Stock Detail
-
-Displays for one selected stock:
-
-- Recent price trend
-- Momentum metrics
-- Fundamental metrics
-- Risk metrics
-- Sector context
-- Score breakdown
-- AI-generated research brief
-
-#### Page 4: Agent Chat
-
-Allows natural language queries such as:
+Dependency direction is strict:
 
 ```text
-Find undervalued large-cap stocks.
-Show stocks with strong momentum but moderate risk.
-Why is this stock ranked highly?
-Compare MSFT and NVDA.
-Generate a research brief for COST.
+Provider clients -> normalized data -> analytics -> application services
+-> MCP tools -> agent/UI
 ```
 
----
+Provider-specific JSON must not leak into analytics, MCP schemas, or UI code.
 
-### 6.2 AI Agent Layer
+## 6. Data Contract
 
-The AI Agent is responsible for:
+The normative field definitions live in `config/data_contract.yaml`. The row grain is one security per screening as-of date, keyed by `(as_of_date, ticker)`.
 
-- Understanding user intent
-- Detecting investment preference
-- Selecting the appropriate screening mode
-- Selecting the stock universe
-- Choosing which MCP tools to call
-- Generating a natural language response based on tool outputs
+### Identity and Provenance
 
-The agent should not invent financial analysis without tool results.
-
-All stock rankings and explanations should be grounded in:
-
-- Actual market data
-- Fundamental metrics
-- Factor scores
-- Sector analysis
-- Risk metrics
-- Screening results
-
-Example:
-
-User query:
-
-```text
-Find undervalued stocks with strong fundamentals.
-```
-
-Agent interpretation:
-
-```text
-Preference: Value + Quality
-Mode: value
-Universe: default sp500
-Tools needed:
-- get_stock_universe
-- fetch_market_data
-- fetch_fundamental_data
-- screen_stocks
-- generate_screening_summary
-```
-
----
-
-### 6.3 MCP Tool Layer
-
-The MCP layer exposes system capabilities as standardized tools that the AI Agent can call.
-
-#### Required MCP Tools
-
-##### 1. `get_stock_universe`
-
-Purpose:
-
-Returns the list of tickers in the selected universe.
-
-Input:
-
-```json
-{
-  "universe": "sp500"
-}
-```
-
-Output fields:
+Required identity fields:
 
 ```text
 ticker
 company_name
 sector
 industry
-market_cap
-exchange
-universe_name
+cik
 ```
 
-Supported universes in initial design:
+Required provenance and quality fields:
 
 ```text
-sp500
-custom
+as_of_date
+market_data_source
+price_data_end
+market_data_age_days
+fundamental_data_source
+fundamental_period_end
+fundamental_filed_date
+fundamental_age_days
+data_quality_flags
+eligible_for_scoring
 ```
 
-Future supported universes:
+### Market Features
+
+Required or planned market inputs:
 
 ```text
-nasdaq100
-russell1000
-small_cap_opportunity
-```
-
----
-
-##### 2. `get_market_overview`
-
-Purpose:
-
-Provides current market and sector-level overview.
-
-Input:
-
-```json
-{
-  "universe": "sp500"
-}
-```
-
-Output:
-
-```text
-market_return
-sector_performance
-top_sectors
-weak_sectors
-market_breadth
-risk_environment
-```
-
----
-
-##### 3. `get_market_data`
-
-Purpose:
-
-Fetches latest and historical market data for selected tickers.
-
-Input:
-
-```json
-{
-  "tickers": ["MSFT", "NVDA", "AAPL"],
-  "period": "1y"
-}
-```
-
-Output:
-
-```text
-date
-ticker
-open
-high
-low
-close
-adjusted_close
-volume
-```
-
----
-
-##### 4. `get_fundamental_data`
-
-Purpose:
-
-Fetches fundamental metrics for selected tickers.
-
-Input:
-
-```json
-{
-  "tickers": ["MSFT", "NVDA", "AAPL"]
-}
-```
-
-Output:
-
-```text
-ticker
-market_cap
-pe_ratio
-forward_pe
-price_to_sales
-profit_margin
-revenue_growth
-roe
-debt_to_equity
-free_cash_flow
-beta
-```
-
----
-
-##### 5. `screen_stocks`
-
-Purpose:
-
-Runs the full screening pipeline.
-
-Input:
-
-```json
-{
-  "universe": "sp500",
-  "mode": "balanced",
-  "sector": null,
-  "top_n": 20,
-  "filters": {
-    "min_price": 5,
-    "min_market_cap": null,
-    "min_avg_volume": null
-  }
-}
-```
-
-Output:
-
-```text
-rank
-ticker
-company_name
-sector
-final_score
-momentum_score
-quality_score
-valuation_score
-risk_score
-sector_strength_score
-main_strengths
-main_risks
-```
-
----
-
-##### 6. `get_stock_detail`
-
-Purpose:
-
-Returns detailed factor breakdown for one stock.
-
-Input:
-
-```json
-{
-  "ticker": "MSFT",
-  "mode": "balanced"
-}
-```
-
-Output:
-
-```text
-ticker
-company_name
-sector
-market_metrics
-fundamental_metrics
-risk_metrics
-factor_scores
-ranking_reason
-risk_notes
-```
-
----
-
-##### 7. `compare_stocks`
-
-Purpose:
-
-Compares multiple stocks using the same scoring framework.
-
-Input:
-
-```json
-{
-  "tickers": ["MSFT", "NVDA", "AAPL"],
-  "mode": "balanced"
-}
-```
-
-Output:
-
-```text
-comparison_table
-relative_strengths
-relative_weaknesses
-best_fit_by_preference
-```
-
----
-
-##### 8. `generate_research_brief`
-
-Purpose:
-
-Generates an analyst-style research brief based on computed data.
-
-Input:
-
-```json
-{
-  "ticker": "MSFT",
-  "mode": "balanced"
-}
-```
-
-Output:
-
-```text
-research_brief
-key_strengths
-main_risks
-sector_context
-next_research_questions
-disclaimer
-```
-
-The brief must clearly state that it is for further research only and not financial advice.
-
----
-
-### 6.4 Analytics Engine
-
-The Analytics Engine is the core calculation layer.
-
-It transforms raw market and fundamental data into:
-
-- Features
-- Factor scores
-- Stock rankings
-- Risk explanations
-- Sector insights
-- Research brief inputs
-
-#### Main Responsibilities
-
-##### 1. Universe Filtering
-
-Applies universe-specific filters.
-
-Examples:
-
-```text
-minimum price
-minimum market cap
-minimum average volume
-sector filter
-data quality filter
-```
-
-##### 2. Data Standardization
-
-Converts different data sources into one consistent schema.
-
-Standard stock-level schema:
-
-```text
-ticker
-company_name
-sector
-industry
-exchange
-market_cap
 price
-volume
-avg_volume
-return_1d
-return_5d
+average_volume_20d
 return_1m
 return_3m
 return_6m
 volatility_20d
 volatility_60d
-max_drawdown
-ma_20
-ma_50
-ma_gap
-pe_ratio
-forward_pe
-profit_margin
+max_drawdown_1y
+ma20_gap
+ma50_gap
+volume_trend
+relative_strength_3m
+beta_1y
+```
+
+Beta and relative strength use SPY daily history from the same provider. Prices must be explicitly adjusted.
+
+### Fundamental Features
+
+```text
+annual_revenue
+annual_net_income
 revenue_growth
+profit_margin
 roe
-debt_to_equity
-beta
-quality_score
-valuation_score
-momentum_score
-risk_score
-sector_strength_score
-final_score
-data_quality_score
+liabilities_to_equity
+annual_free_cash_flow
+shares_outstanding
 ```
 
-##### 3. Feature Engineering
-
-Market features:
+Optional derived proxies:
 
 ```text
-1D return
-5D return
-1M return
-3M return
-6M return
-20D volatility
-60D volatility
-maximum drawdown
-moving average gap
-volume trend
-relative strength versus benchmark
+market_cap_proxy = price * valid shares_outstanding
+annual_pe_proxy = market_cap_proxy / positive annual_net_income
 ```
 
-Fundamental features:
+Do not label these proxies as vendor market cap or forward PE. `liabilities_to_equity` remains the explicit leverage proxy until debt-taxonomy mapping is validated.
+
+## 7. Analytics Engine
+
+### Universe Filtering
+
+Supported filters should include:
 
 ```text
-PE ratio
-forward PE
-price-to-sales
-profit margin
-revenue growth
-ROE
-debt-to-equity
-free cash flow
-beta
+universe or custom tickers
+sector
+minimum price
+minimum market cap when available
+minimum 20-day average volume
+data eligibility
+top_n
 ```
 
-Sector features:
+### Preprocessing
 
-```text
-sector average return
-sector momentum
-sector ranking
-sector relative strength
-```
+- Exclude rows that fail required market fields or hard freshness/quality rules.
+- Winsorize continuous scoring inputs within sector at the 5th and 95th percentiles.
+- Require enough valid observations before calculating a sector percentile.
+- Use rank percentiles on a consistent 0-100 scale.
+- Reverse direction for metrics where lower is better.
+- Preserve raw feature values beside transformed scores.
 
-Risk features:
+### Factor Scores
 
-```text
-volatility
-drawdown
-beta
-liquidity
-valuation risk
-data quality risk
-```
+The analytical core produces:
 
-##### 4. Factor Scoring
+- **Momentum:** returns, moving-average gaps, relative strength, and optional volume trend.
+- **Quality:** revenue growth, profit margin, ROE, and applicable cash-flow evidence.
+- **Valuation:** annual PE proxy and other approved valuation measures when available.
+- **Risk:** volatility, drawdown, beta, liquidity, and quality warnings.
+- **Sector Strength:** sector-level relative market performance.
 
-Core factor scores:
+Do not create a score penalty merely because an optional or inapplicable field is null. Data-quality failures should instead produce explicit exclusion or warning states.
 
-```text
-Momentum Score
-Quality Score
-Valuation Score
-Risk Score
-Sector Strength Score
-```
+### Screening Modes
 
-Each score should be normalized to a consistent scale, for example:
+The source of truth is `config/screening_modes.yaml`.
 
-```text
-0 to 100
-```
-
-Recommended approach:
-
-- Use percentile ranking within the selected universe.
-- Higher is better for positive factors.
-- Reverse the percentile for risk metrics where lower risk is better.
-- Penalize missing or unreliable data through `data_quality_score`.
-
-##### 5. Preference-Aware Dynamic Weighting
-
-This is a core feature of the project.
-
-The system should not use one fixed formula for every user.
-
-Instead, it should adjust factor weights based on the user's investment preference.
-
-Supported screening modes:
-
-```text
-balanced
-growth
-value
-low_risk
-high_opportunity
-```
-
-Initial mode weights:
-
-| Factor | Balanced | Growth | Value | Low-Risk | High-Opportunity |
-|---|---:|---:|---:|---:|---:|
-| Momentum | 0.25 | 0.35 | 0.10 | 0.15 | 0.35 |
-| Quality | 0.25 | 0.25 | 0.25 | 0.25 | 0.15 |
-| Valuation | 0.20 | 0.10 | 0.35 | 0.15 | 0.10 |
-| Risk | 0.15 | 0.10 | 0.20 | 0.35 | 0.15 |
-| Sector Strength | 0.15 | 0.20 | 0.10 | 0.10 | 0.25 |
+| Factor | Balanced | Growth | Value | Low Risk |
+| --- | ---: | ---: | ---: | ---: |
+| Momentum | 0.25 | 0.35 | 0.10 | 0.15 |
+| Quality | 0.25 | 0.25 | 0.25 | 0.25 |
+| Valuation | 0.20 | 0.10 | 0.35 | 0.15 |
+| Risk | 0.15 | 0.10 | 0.20 | 0.35 |
+| Sector Strength | 0.15 | 0.20 | 0.10 | 0.10 |
 
 Final score:
 
 ```text
-Final Score =
-Momentum Score × Momentum Weight
-+ Quality Score × Quality Weight
-+ Valuation Score × Valuation Weight
-+ Risk Score × Risk Weight
-+ Sector Strength Score × Sector Strength Weight
+sum(applicable factor score * normalized applicable mode weight)
 ```
 
-##### 6. Explanation Generation
+A high-opportunity mode may be considered later, after the four initial modes are stable and defensible.
 
-The Analytics Engine should produce structured explanation inputs.
+### Explanation Contract
 
-Example:
+The analytics layer, not the LLM, identifies structured evidence:
 
 ```text
-Main strengths:
-- Strong 3-month momentum
-- Above-average profitability
-- Strong sector relative performance
-
-Main risks:
-- Valuation above sector median
-- Higher-than-average volatility
-- Recent drawdown risk
+main_strengths
+main_risks
+missing_inputs
+quality_warnings
+factor_score_breakdown
+sector_context
+ranking_reason_codes
+next_research_questions
 ```
 
-The AI Agent can then convert these structured explanations into natural language.
+The LLM may turn these fields into prose but may not introduce unsupported facts.
 
----
+## 8. Application and MCP Capabilities
 
-## 7. Universe Configuration
+MCP is an adapter over tested application services. Raw provider calls remain internal.
 
-Universe definitions should be stored in a config file, such as:
+| Capability | Purpose | Core input | Core output |
+| --- | --- | --- | --- |
+| `get_stock_universe` | Resolve a configured universe | universe or custom tickers | identity, sector, industry, eligibility |
+| `get_market_overview` | Summarize market and sectors | universe, as-of date | market return, breadth, sector ranking, risk environment |
+| `get_market_data` | Return normalized daily history | tickers, period | adjusted OHLCV with dates and provenance |
+| `get_fundamental_data` | Return normalized filing metrics | tickers, as-of date | values, periods, filing dates, warnings |
+| `screen_stocks` | Run filters and preference-aware ranking | universe, mode, filters, top_n | ranks, factor scores, strengths, risks, dates |
+| `get_stock_detail` | Explain one security | ticker, mode, as-of date | features, factors, ranking reason, warnings |
+| `compare_stocks` | Compare securities consistently | tickers, mode, as-of date | comparison table, relative strengths and risks |
+| `generate_research_brief` | Format grounded research output | ticker, mode, computed evidence | brief, risks, context, questions, disclaimer |
 
-```yaml
-universes:
-  sp500:
-    description: "Large-cap U.S. stocks with high liquidity and better data quality"
-    enabled: true
-    min_price: 5
-    min_market_cap: null
-    min_avg_volume: 500000
-    allow_missing_fundamentals: false
+All tool schemas must be narrow, versioned, deterministic for the same snapshot, and independently testable.
 
-  custom:
-    description: "User-provided ticker list"
-    enabled: true
-    min_price: 5
-    min_market_cap: null
-    min_avg_volume: null
-    allow_missing_fundamentals: true
+## 9. User Interface
 
-  nasdaq100:
-    description: "Large-cap growth-oriented Nasdaq stocks"
-    enabled: false
-    min_price: 5
-    min_market_cap: null
-    min_avg_volume: 500000
-    allow_missing_fundamentals: false
+The first usable screen should be the operational screener, not a marketing landing page.
 
-  russell1000:
-    description: "Broader U.S. large and mid-cap equity universe"
-    enabled: false
-    min_price: 5
-    min_market_cap: 1000000000
-    min_avg_volume: 300000
-    allow_missing_fundamentals: true
+### Stock Screener
 
-  small_cap_opportunity:
-    description: "Higher-risk small-cap opportunity universe"
-    enabled: false
-    min_price: 5
-    min_market_cap: 300000000
-    min_avg_volume: 500000
-    allow_missing_fundamentals: true
-```
+Controls:
 
-The initial project only needs to implement:
+- universe or custom ticker list;
+- screening mode;
+- sector;
+- top N;
+- minimum price, market cap when available, and average volume.
+
+Output:
+
+- rank, ticker, company, sector, final score;
+- factor scores and main reason codes;
+- data date, warnings, and exclusion reason.
+
+### Stock Detail
+
+- Price history and market features.
+- Fundamentals with fiscal and filing dates.
+- Factor-score breakdown.
+- Sector context.
+- Strengths, risks, missing fields, and next research questions.
+
+### Later Views
+
+- Market Overview: index/benchmark condition, breadth, sectors, and risk environment.
+- Comparison: same-mode side-by-side feature and score comparison.
+- Agent Chat: natural-language routing to MCP tools with visible grounding.
+
+## 10. Research Brief Contract
+
+Each brief includes:
 
 ```text
-sp500
-custom
+Ticker and company
+Sector
+As-of date and source dates
+Screening mode, rank, and final score
+Why it appears in the screen
+Key strengths
+Main risks and missing inputs
+Sector context
+Factor score breakdown
+Suggested next research questions
+Disclaimer
 ```
 
-Other universes can remain as future extensions.
+Required disclaimer:
 
----
+> This output is generated for educational and research purposes only. It is not financial advice, investment advice, or a recommendation to buy or sell any security.
 
-## 8. Screening Mode Configuration
-
-Screening modes should also be configurable.
-
-Example:
-
-```yaml
-screening_modes:
-  balanced:
-    description: "General-purpose stock screening with balanced factor weights"
-    weights:
-      momentum: 0.25
-      quality: 0.25
-      valuation: 0.20
-      risk: 0.15
-      sector_strength: 0.15
-
-  growth:
-    description: "Focuses on momentum, revenue growth, and sector strength"
-    weights:
-      momentum: 0.35
-      quality: 0.25
-      valuation: 0.10
-      risk: 0.10
-      sector_strength: 0.20
-
-  value:
-    description: "Focuses on valuation, profitability, and financial quality"
-    weights:
-      momentum: 0.10
-      quality: 0.25
-      valuation: 0.35
-      risk: 0.20
-      sector_strength: 0.10
-
-  low_risk:
-    description: "Focuses on lower volatility, lower drawdown, and stable quality"
-    weights:
-      momentum: 0.15
-      quality: 0.25
-      valuation: 0.15
-      risk: 0.35
-      sector_strength: 0.10
-
-  high_opportunity:
-    description: "Focuses on momentum, sector tailwinds, and opportunity signals with risk controls"
-    weights:
-      momentum: 0.35
-      quality: 0.15
-      valuation: 0.10
-      risk: 0.15
-      sector_strength: 0.25
-```
-
----
-
-## 9. Data Sources
-
-### Initial Data Sources
-
-Validated for the prototype after the 2026-07-11 feasibility test:
+## 11. Planned Code Boundaries
 
 ```text
-Wikipedia S&P 500 constituents table: universe, company, GICS sector, industry, CIK
-Twelve Data API: adjusted latest-available daily OHLCV
-SEC EDGAR Company Facts: filing-based annual accounting fundamentals
-Local CSV / Parquet / JSON cache: reproducible analysis and rate-limit protection
+config/       provider, universe, mode, and data-contract configuration
+src/          provider adapters, feature pipeline, analytics, services
+tests/        unit, contract, integration, and ranking-stability tests
+app/          Streamlit application after analytics stabilizes
+mcp_servers/  MCP adapters after application services stabilize
+agent/        intent routing and grounded response generation
+data/         ignored raw/cache data and versioned processed snapshots
+outputs/      machine-readable validation, rankings, and reports
+notebooks/    exploration only; no production orchestration
 ```
 
-Nasdaq website capture was rejected after reviewing its legal terms. Yahoo Finance returned HTTP 429 and Stooq returned browser verification. These sources are not MVP dependencies.
-
-### Data Types
-
-Required:
+Likely future analytical modules:
 
 ```text
-ticker list
-company name
-sector
-industry
-historical daily prices
-latest price
-volume
-basic fundamental metrics
+feature_pipeline.py
+scoring.py
+screening.py
+sector_analysis.py
+explanations.py
+report_generation.py
 ```
 
-Data claims and fields must match source capabilities:
-
-```text
-Use "latest available daily data," not real-time data.
-Show the market-data date and fundamental filing period.
-Calculate beta from stock and SPY returns.
-Request Twelve Data daily prices with `adjust=all` and record the adjustment mode.
-Defer forward PE and analyst estimates until a reliable source is selected.
-Use sector-relative, missing-aware accounting scores.
-```
-
-Optional:
-
-```text
-recent news headlines
-news sentiment
-analyst rating changes
-earnings calendar
-```
-
-### Notes
-
-The system should use local caching to reduce repeated requests.
-
-Recommended local files:
-
-```text
-data/raw/sp500_universe.csv
-data/cache/twelve_data/*.json
-data/cache/sec/*.json
-data/processed/data_feasibility_market_prices.parquet
-data/processed/data_feasibility_unified_features.parquet
-data/processed/rankings.csv
-outputs/data_feasibility/data_quality_report.md
-```
-
----
-
-## 10. Important Scope Decisions
-
-### In Scope
-
-The project includes:
-
-```text
-market analysis
-stock screening
-factor scoring
-preference-aware ranking
-sector analysis
-risk explanation
-MCP tool-calling
-AI-generated research brief
-Streamlit dashboard
-```
-
-### Out of Scope
-
-The project does not include:
-
-```text
-stock price prediction
-automated trading
-portfolio optimization
-order execution
-financial advice
-guaranteed return generation
-tick-level real-time trading data
-```
-
-Use this wording:
-
-```text
-The system is designed as a decision-support and research-assistance tool, not as an automated trading system or financial advisory service.
-```
-
----
-
-## 11. Recommended Repository Structure
-
-```text
-equity-screening-agent/
-│
-├── app/
-│   ├── streamlit_app.py
-│   └── pages/
-│       ├── 1_market_overview.py
-│       ├── 2_stock_screener.py
-│       ├── 3_stock_detail.py
-│       └── 4_agent_chat.py
-│
-├── config/
-│   ├── universes.yaml
-│   ├── screening_modes.yaml
-│   ├── data_sources.yaml
-│   └── data_contract.yaml
-│
-├── data/
-│   ├── raw/
-│   ├── processed/
-│   └── cache/
-│
-├── src/
-│   ├── __init__.py
-│   ├── universe.py
-│   ├── market_data.py
-│   ├── twelve_data.py
-│   ├── fundamentals.py
-│   ├── features.py
-│   ├── market_coverage.py
-│   ├── sec_coverage.py
-│   ├── unified_data.py
-│   ├── scoring.py
-│   ├── screening.py
-│   ├── sector_analysis.py
-│   ├── explanations.py
-│   ├── report_generation.py
-│   └── utils.py
-│
-├── mcp_servers/
-│   ├── __init__.py
-│   ├── universe_server.py
-│   ├── market_server.py
-│   ├── fundamentals_server.py
-│   ├── screening_server.py
-│   └── report_server.py
-│
-├── agent/
-│   ├── __init__.py
-│   ├── agent.py
-│   ├── intent_parser.py
-│   └── prompts.py
-│
-├── notebooks/
-│   └── 01_data_feasibility.ipynb
-│
-├── outputs/
-│   ├── pre_model_validation/
-│   ├── rankings/
-│   ├── reports/
-│   └── screenshots/
-│
-├── tests/
-│   ├── test_universe.py
-│   ├── test_features.py
-│   ├── test_scoring.py
-│   └── test_screening.py
-│
-├── requirements.txt
-├── DATA_QUALITY_POLICY.md
-├── README.md
-└── PROJECT_SPEC.md
-```
-
----
-
-## 12. Development Roadmap
-
-### Phase 1: Project Setup
-
-Goal:
-
-Set up project structure and define the core scope.
-
-Tasks:
-
-- Create GitHub repository
-- Create folder structure
-- Create config files
-- Install dependencies
-- Define universe schema
-- Define screening mode schema
-- Confirm project does not include price prediction
-
-Deliverable:
-
-```text
-Working repo skeleton
-Config files
-Initial README
-```
-
----
-
-### Phase 2: Data Pipeline
-
-Goal:
-
-Collect and cache stock universe, price data, and fundamental data.
-
-Tasks:
-
-- Implement `get_stock_universe(universe)`
-- Implement S&P 500 universe loader
-- Implement custom ticker list support
-- Fetch historical price data
-- Fetch latest price data
-- Fetch basic fundamentals
-- Save data locally
-- Handle missing data
-
-Deliverable:
-
-```text
-S&P 500 ticker list
-Historical price data
-Fundamental metrics
-Cached data files
-```
-
----
-
-### Phase 3: Analytics Engine
-
-Goal:
-
-Convert raw data into features and factor scores.
-
-Tasks:
-
-- Calculate returns
-- Calculate volatility
-- Calculate drawdown
-- Calculate moving average gap
-- Calculate volume trend
-- Calculate quality score
-- Calculate valuation score
-- Calculate risk score
-- Calculate sector strength score
-- Normalize scores from 0 to 100
-
-Deliverable:
-
-```text
-Feature table
-Factor score table
-Sector summary table
-```
-
----
-
-### Phase 4: Preference-Aware Screening
-
-Goal:
-
-Rank stocks based on user preference.
-
-Tasks:
-
-- Load screening mode weights
-- Implement dynamic weighting
-- Implement final score calculation
-- Implement `screen_stocks(universe, mode, filters, top_n)`
-- Add sector filter
-- Add minimum price, market cap, and volume filters
-- Generate ranking result
-
-Deliverable:
-
-```text
-Personalized stock ranking table
-Balanced / Growth / Value / Low-Risk modes
-```
-
----
-
-### Phase 5: Explanation and Research Brief Inputs
-
-Goal:
-
-Make screening results explainable.
-
-Tasks:
-
-- Identify main strengths for each stock
-- Identify main risks for each stock
-- Generate score breakdown
-- Generate structured explanation fields
-- Prepare inputs for research brief generation
-
-Deliverable:
-
-```text
-Ranking table with explanations
-Stock-level score breakdown
-Risk notes
-```
-
----
-
-### Phase 6: MCP Tool Layer
-
-Goal:
-
-Expose system capabilities as MCP tools.
-
-Tasks:
-
-- Implement `get_stock_universe`
-- Implement `get_market_overview`
-- Implement `get_market_data`
-- Implement `get_fundamental_data`
-- Implement `screen_stocks`
-- Implement `get_stock_detail`
-- Implement `compare_stocks`
-- Implement `generate_research_brief`
-- Test each MCP tool independently
-
-Deliverable:
-
-```text
-Working MCP tools
-Agent-callable financial analytics functions
-```
-
----
-
-### Phase 7: AI Agent Layer
-
-Goal:
-
-Allow natural language interaction.
-
-Tasks:
-
-- Implement intent parser
-- Map user intent to screening mode
-- Map user intent to universe selection
-- Let agent call MCP tools
-- Generate user-facing responses based on tool outputs
-- Prevent unsupported financial advice language
-
-Deliverable:
-
-```text
-Agent that can answer screening, comparison, and stock detail queries
-```
-
----
-
-### Phase 8: Streamlit Dashboard
-
-Goal:
-
-Build a user-facing demo application.
-
-Tasks:
-
-- Build Market Overview page
-- Build Stock Screener page
-- Build Stock Detail page
-- Build Agent Chat page
-- Add filtering controls
-- Add ranking table
-- Add factor score visualization
-- Add research brief display
-
-Deliverable:
-
-```text
-Interactive Streamlit dashboard
-```
-
----
-
-### Phase 9: Testing and Refinement
-
-Goal:
-
-Improve reliability and presentation quality.
-
-Tasks:
-
-- Test all screening modes
-- Check missing data handling
-- Check ranking reasonableness
-- Check agent grounding
-- Add disclaimers
-- Improve UI
-- Add screenshots
-- Write README
-
-Deliverable:
-
-```text
-Stable demo-ready system
-```
-
----
-
-### Phase 10: Final Report and Presentation
-
-Goal:
-
-Prepare the final academic and portfolio deliverables.
-
-Tasks:
-
-- Write final report
-- Explain business problem
-- Explain architecture
-- Explain MCP design
-- Explain analytics methodology
-- Show example results
-- Discuss limitations
-- Discuss future expansion
-- Prepare demo screenshots
-- Optional: record demo video
-
-Deliverable:
-
-```text
-Final paper/report
-Demo screenshots
-GitHub README
-Portfolio-ready project
-```
-
----
-
-## 13. Suggested Implementation Order
-
-The safest implementation order is:
-
-```text
-1. Data feasibility and provider validation
-2. Full-universe market coverage test
-3. Sector-level SEC fundamental coverage test
-4. Unified data contract and quality rules
-5. Sector-relative, missing-aware factor scoring
-6. Preference-aware ranking and explanations
-7. Minimal Streamlit screener and stock detail views
-8. MCP tools over stable analytical functions
-9. AI Agent and research brief generation
-10. Final report
-```
-
-Important rule:
-
-```text
-Build the analytical core first, then let the AI Agent call it.
-```
-
-Do not build a chatbot before the stock screening logic works.
-
----
-
-## 14. Example User Flow
-
-User asks:
-
-```text
-Find lower-risk stocks with strong fundamentals.
-```
-
-System process:
-
-```text
-1. Agent detects preference: low_risk + quality
-2. Agent selects default universe: sp500
-3. Agent calls screen_stocks(universe="sp500", mode="low_risk")
-4. Analytics Engine calculates factor scores
-5. Screening Tool returns top-ranked stocks
-6. Agent explains why the stocks rank highly
-7. Report Tool generates brief research notes
-```
-
-Output example:
-
-```text
-Top stocks for further research under Low-Risk Mode:
-
-1. MSFT
-2. COST
-3. JNJ
-4. PG
-5. AAPL
-
-MSFT ranks highly because it combines strong profitability, relatively stable price behavior, lower drawdown compared with other technology stocks, and strong sector positioning. However, valuation remains above the market average, so further research should evaluate whether future earnings growth justifies the premium.
-```
-
----
-
-## 15. Research Brief Template
-
-Each stock research brief should include:
-
-```text
-Ticker:
-Company:
-Sector:
-Screening Mode:
-Rank:
-Final Score:
-
-Why it appears in the screen:
-Key strengths:
-Main risks:
-Sector context:
-Score breakdown:
-Suggested next research questions:
-Disclaimer:
-```
-
-Example disclaimer:
-
-```text
-This output is generated for educational and research purposes only. It is not financial advice, investment advice, or a recommendation to buy or sell any security.
-```
-
----
-
-## 16. Success Criteria
-
-The project is successful if:
-
-- The system can screen the S&P 500 universe.
-- The system supports multiple screening modes.
-- The system adjusts rankings based on user preference.
-- The system produces explainable factor scores.
-- The system can generate stock-level research briefs.
-- The system uses MCP tools for core functions.
-- The system provides a usable dashboard or chat interface.
-- The project is clearly positioned as decision support, not stock prediction.
-
----
-
-## 17. Resume Description
-
-Suggested resume bullet:
-
-```text
-Built an MCP-based AI equity screening agent using Python, market data APIs, factor scoring, and Streamlit to rank U.S. equities based on user investment preferences and generate analyst-style research briefs for further investment research.
-```
-
-More technical version:
-
-```text
-Developed a universe-agnostic, preference-aware stock screening system with MCP tool-calling, dynamic factor weighting, sector analysis, risk scoring, and AI-generated research summaries for S&P 500 equities.
-```
-
----
-
-## 18. Final Scope Recommendation
-
-For the two-month project, the recommended final scope is:
-
-### Must Have
-
-```text
-S&P 500 universe
-Custom ticker list support
-Market data pipeline
-Fundamental data pipeline
-Analytics Engine
-Preference-aware screening
-Multiple screening modes
-Ranking table
-Score breakdown
-Research brief generation
-Streamlit dashboard
-MCP tools
-```
-
-### Should Have
-
-```text
-Agent chat interface
-Stock comparison
-Sector overview
-Market overview
-Data caching
-Basic risk notes
-```
-
-### Nice to Have
-
-```text
-Nasdaq 100 universe
-Russell 1000 universe
-Small-cap opportunity universe
-News sentiment
-Advanced visualizations
-Demo video
-```
-
-The key is to implement the system as extensible from the beginning, while only fully enabling the most reliable universe first.
-
----
-
-## 19. Final Positioning Statement
-
-This project should be presented as:
-
-```text
-An AI Agent-Assisted U.S. Equity Screening System that uses MCP tools, current market data, fundamental metrics, sector trends, risk analysis, and preference-aware scoring to help users identify stocks worth further research.
-```
-
-It should not be presented as:
-
-```text
-A stock price prediction model
-A trading bot
-A financial advisor
-A guaranteed return system
-```
+## 12. Delivery Sequence
+
+1. Validate providers, coverage, and data quality.
+2. Build the resumable full-universe feature pipeline.
+3. Validate and freeze the versioned model matrix contract.
+4. Implement sector-relative factor scoring.
+5. Implement preference-aware ranking and structured explanations.
+6. Build the minimal Stock Screener and Stock Detail UI.
+7. Expose stable services through MCP.
+8. Add the grounded AI agent and research briefs.
+9. Add market/sector views, comparison, and refinements.
+10. Complete the academic paper, screenshots, and optional demo video.
+
+The live status and exact next tasks are maintained in `PROJECT_CONTEXT_AND_PROGRESS.md`.
+
+## 13. Success Criteria
+
+The project is complete when it can:
+
+- reproducibly screen the current S&P 500 and a custom ticker list;
+- produce auditable, preference-sensitive rankings under all four modes;
+- expose factor scores, strengths, risks, missing inputs, and source dates;
+- handle missing and sector-inapplicable data without zero-score distortion;
+- provide useful screener and detail interfaces;
+- expose stable analytical capabilities as MCP tools;
+- ground agent responses and research briefs entirely in tool output;
+- clearly communicate limitations and the research-only boundary;
+- document methodology, data limitations, design decisions, and example results in the final paper.
+
+Suggested portfolio description:
+
+> Developed a universe-agnostic, preference-aware U.S. equity screening system with adjusted market data, SEC fundamentals, sector-relative factor scoring, MCP tool-calling, and grounded AI research summaries.
