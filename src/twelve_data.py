@@ -120,6 +120,22 @@ class TwelveDataClient:
 
         return self._cache_path(ticker, start, end, adjustment).exists()
 
+    def historical_cached(
+        self,
+        ticker: str,
+        start: date,
+        end: date,
+        adjustment: str = "all",
+    ) -> pd.DataFrame:
+        """Read one exact request from cache without a network fallback."""
+
+        payload = self._read_cached_payload(ticker, start, end, adjustment)
+        if payload is None:
+            raise TwelveDataError(
+                f"Exact-date market cache not found for {ticker}: {start} to {end}"
+            )
+        return parse_time_series_payload(payload, ticker)
+
     def _write_cached_payload(
         self,
         ticker: str,

@@ -1,12 +1,17 @@
 contract:
   version: 1.0.0
-  status: validated_pending_feature_matrix
+  status: frozen_v1
+  accepted_run_id: 2026-07-13_sp500_v1_0_0
+  accepted_as_of_date: '2026-07-13'
+  accepted_feature_matrix_sha256: 1c716d9ab7b553eb363321be6d326682b0dd5ff8fc6446e376e416c79ef2a1ef
   row_grain: one row per security per screening as-of date
   primary_key:
     - as_of_date
     - ticker
   universe: current_sp500
   purpose: cross-sectional screening, not historical constituent backtesting
+  required_field_semantics: required columns must exist; nullable and required_for_scoring control row validity
+  row_accounting: retain every requested security and mark ineligible rows explicitly
 
 providers:
   universe: wikipedia_sp500_table
@@ -15,28 +20,44 @@ providers:
   benchmark: SPY via twelve_data_time_series
 
 identity_fields:
-  ticker: {dtype: string, required: true}
-  company_name: {dtype: string, required: true}
-  sector: {dtype: string, required: true}
-  industry: {dtype: string, required: true}
-  cik: {dtype: string, required: true}
+  ticker: {dtype: string, required: true, nullable: false}
+  company_name: {dtype: string, required: true, nullable: false}
+  sector: {dtype: string, required: true, nullable: false}
+  industry: {dtype: string, required: true, nullable: false}
+  cik: {dtype: string, required: true, nullable: false}
 
 provenance_fields:
-  as_of_date: {dtype: date, required: true}
-  market_data_source: {dtype: string, required: true}
-  price_data_end: {dtype: date, required: true}
-  market_data_age_days: {dtype: integer, required: true}
-  fundamental_data_source: {dtype: string, required: true}
-  fundamental_period_end: {dtype: date, required: true}
-  fundamental_filed_date: {dtype: date, required: true}
-  fundamental_age_days: {dtype: integer, required: true}
-  data_quality_flags: {dtype: list_string, required: true}
+  as_of_date: {dtype: date, required: true, nullable: false}
+  market_data_source: {dtype: string, required: true, nullable: false, allowed_values: [twelve_data]}
+  price_data_end: {dtype: date, required: true, nullable: true, required_for_scoring: true}
+  market_data_age_days: {dtype: integer, required: true, nullable: true, required_for_scoring: true}
+  fundamental_data_source: {dtype: string, required: true, nullable: false, allowed_values: [sec_companyfacts]}
+  fundamental_period_end: {dtype: date, required: true, nullable: true, required_for_scoring: true}
+  fundamental_filed_date: {dtype: date, required: true, nullable: true, required_for_scoring: true}
+  fundamental_age_days: {dtype: integer, required: true, nullable: true, required_for_scoring: true}
+  annual_revenue_period_end: {dtype: date, required: true, nullable: true}
+  annual_net_income_period_end: {dtype: date, required: true, nullable: true}
+  profit_margin_period_end: {dtype: date, required: true, nullable: true}
+  roe_period_end: {dtype: date, required: true, nullable: true}
+  leverage_period_end: {dtype: date, required: true, nullable: true}
+  free_cash_flow_period_end: {dtype: date, required: true, nullable: true}
+  shares_outstanding_period_end: {dtype: date, required: true, nullable: true}
+
+quality_fields:
+  data_quality_flags: {dtype: list_string, required: true, nullable: false}
+  missing_fields: {dtype: list_string, required: true, nullable: false}
+  exclusion_reasons: {dtype: list_string, required: true, nullable: false}
+  stale_fundamental_metrics: {dtype: list_string, required: true, nullable: false}
+  eligible_for_scoring: {dtype: boolean, required: true, nullable: false}
+  market_error: {dtype: string, required: true, nullable: true}
+  fundamental_error: {dtype: string, required: true, nullable: true}
 
 market_fields:
   price:
     dtype: float
     unit: USD
     required: true
+    required_for_scoring: true
     source: twelve_data
     adjustment: all
     invalid_if: nonpositive
@@ -44,46 +65,55 @@ market_fields:
     dtype: float
     unit: shares
     required: true
+    required_for_scoring: true
     score_direction: context
   return_1m:
     dtype: float
     unit: decimal_return
     required: true
+    required_for_scoring: true
     score_direction: higher
   return_3m:
     dtype: float
     unit: decimal_return
     required: true
+    required_for_scoring: true
     score_direction: higher
   return_6m:
     dtype: float
     unit: decimal_return
     required: true
+    required_for_scoring: true
     score_direction: higher
   volatility_20d:
     dtype: float
     unit: annualized_decimal
     required: true
+    required_for_scoring: true
     score_direction: lower
   volatility_60d:
     dtype: float
     unit: annualized_decimal
     required: true
+    required_for_scoring: true
     score_direction: lower
   max_drawdown_1y:
     dtype: float
     unit: decimal_return
     required: true
+    required_for_scoring: true
     score_direction: higher
   ma20_gap:
     dtype: float
     unit: decimal_ratio
     required: true
+    required_for_scoring: true
     score_direction: higher
   ma50_gap:
     dtype: float
     unit: decimal_ratio
     required: true
+    required_for_scoring: true
     score_direction: higher
   volume_trend:
     dtype: float
@@ -94,11 +124,13 @@ market_fields:
     dtype: float
     unit: excess_decimal_return
     required: true
+    required_for_scoring: true
     score_direction: higher
   beta_1y:
     dtype: float
     unit: ratio
     required: true
+    required_for_scoring: true
     score_direction: lower
 
 fundamental_fields:
@@ -126,7 +158,13 @@ fundamental_fields:
     required: true
     score_direction: higher
     comparison_group: sector
-    review_if: absolute_value_above_1
+    invalid_for_scoring_if: absolute_value_above_1
+    raw_audit_field: profit_margin_raw
+  profit_margin_raw:
+    dtype: float
+    unit: decimal_ratio
+    required: false
+    scoring_use: audit_only
   roe:
     dtype: float
     unit: decimal_ratio
@@ -165,15 +203,42 @@ derived_optional_fields:
   annual_pe_proxy:
     formula: market_cap_proxy / annual_net_income
     required: false
+    score_direction: lower
+    comparison_group: sector
     valid_if: annual_net_income_gt_0
     missing_policy: remain_null
 
 missing_data_policy:
   required_market_field: exclude_security_from_ranking
+  required_fundamental_column: retain_null_flag_and_report_missingness
   optional_component: keep_null_and_renormalize_weights
   forbidden_imputation:
     - fill_missing_with_zero
     - global_mean_imputation_for_scoring
+
+quality_thresholds:
+  minimum_market_history_rows: 180
+  maximum_market_data_age_days: 5
+  maximum_fundamental_age_days: 550
+  maximum_duplicate_date_count: 0
+  maximum_missing_ohlcv_row_count: 0
+  maximum_nonpositive_price_row_count: 0
+  extreme_daily_return_threshold: 0.50
+  maximum_extreme_daily_move_count: 0
+  adjusted_prices_required: true
+  minimum_eligible_rate: 0.95
+
+fundamental_metric_freshness:
+  policy: non-null scoring values require a metric-specific period no more than 550 days old
+  period_fields:
+    annual_revenue: annual_revenue_period_end
+    annual_net_income: annual_net_income_period_end
+    revenue_growth: annual_revenue_period_end
+    profit_margin: profit_margin_period_end
+    roe: roe_period_end
+    liabilities_to_equity: leverage_period_end
+    annual_free_cash_flow: free_cash_flow_period_end
+    shares_outstanding: shares_outstanding_period_end
 
 model_preprocessing:
   grouping: sector

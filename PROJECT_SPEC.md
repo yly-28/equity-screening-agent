@@ -160,8 +160,20 @@ fundamental_data_source
 fundamental_period_end
 fundamental_filed_date
 fundamental_age_days
+annual_revenue_period_end
+annual_net_income_period_end
+profit_margin_period_end
+roe_period_end
+leverage_period_end
+free_cash_flow_period_end
+shares_outstanding_period_end
 data_quality_flags
+missing_fields
+exclusion_reasons
+stale_fundamental_metrics
 eligible_for_scoring
+market_error
+fundamental_error
 ```
 
 ### Market Features
@@ -193,6 +205,7 @@ annual_revenue
 annual_net_income
 revenue_growth
 profit_margin
+profit_margin_raw (audit only)
 roe
 liabilities_to_equity
 annual_free_cash_flow
@@ -233,17 +246,59 @@ top_n
 - Reverse direction for metrics where lower is better.
 - Preserve raw feature values beside transformed scores.
 
+Frozen Phase 3 fixes the statistical details in `config/factor_model.yaml`. The
+reference population is the complete eligible population from the accepted
+feature snapshot, never a filtered result set. A sector metric is available at
+10 or more valid observations and remains null below that threshold; there is
+no global fallback. Quantiles use linear interpolation, ties use average rank,
+and scores use `(rank - 1) / (n - 1) * 100`. A constant sector distribution
+receives 50. Lower-is-better inputs are reversed after the percentile transform.
+Only eligible reference rows fit cutoffs or ranks, but scored artifacts retain
+all input rows and keep every ineligible score null.
+
 ### Factor Scores
 
 The analytical core produces:
 
-- **Momentum:** returns, moving-average gaps, relative strength, and optional volume trend.
+- **Momentum:** returns, moving-average gaps, and optional volume trend.
 - **Quality:** revenue growth, profit margin, ROE, and applicable cash-flow evidence.
 - **Valuation:** annual PE proxy and other approved valuation measures when available.
-- **Risk:** volatility, drawdown, beta, liquidity, and quality warnings.
+- **Risk:** volatility, drawdown, beta, and liabilities-to-equity.
 - **Sector Strength:** sector-level relative market performance.
 
 Do not create a score penalty merely because an optional or inapplicable field is null. Data-quality failures should instead produce explicit exclusion or warning states.
+
+The frozen Phase 3 factor model is version `1.0.0` with status `frozen_v1`.
+Metric weights are
+equal within each factor and are renormalized over the metrics available and
+applicable to each row:
+
+| Factor | Frozen v1 metrics and direction |
+| --- | --- |
+| Momentum | 1m, 3m, and 6m return; MA20 and MA50 gaps; volume trend — all higher is better |
+| Quality | Revenue growth, profit margin, ROE, and exact-period free-cash-flow margin — all higher is better |
+| Valuation | Annual PE proxy — lower is better |
+| Risk | 20d and 60d volatility, beta, and liabilities-to-equity — lower is safer; max drawdown — higher is safer |
+| Sector Strength | Median 3m relative strength among eligible sector members, ranked across sectors — higher is better |
+
+Free-cash-flow margin is `annual_free_cash_flow / annual_revenue`; it is
+available only when revenue is positive and both values have the same annual
+period. It remains inapplicable to Financials, Real Estate, and Utilities. The
+Risk factor is oriented so a higher score always means lower measured risk.
+Share volume is not a Risk input; liquidity remains a downstream screen until
+true average dollar volume is available under a later data-contract version.
+Existing quality warnings remain visible but do not create an uncalibrated
+numeric penalty. Sector Strength requires at least 10 eligible members with
+valid 3m relative strength and uses the same average-tie 0-100 endpoint formula
+across at least two valid sectors; a single valid sector cannot produce a
+relative Sector Strength score.
+
+The former duplicate exposure from sector-ranking both 3m return and 3m
+relative strength was removed: total return remains in Momentum, while relative
+strength is reserved for Sector Strength. Full-snapshot distribution, coverage,
+and preference-sensitivity review approved this methodology for v1. The
+versioned YAML files and `config/scoring_contract.yaml`, rather than prose, are
+the executable source of truth. This freeze does not claim predictive validity.
 
 ### Screening Modes
 
@@ -251,17 +306,26 @@ The source of truth is `config/screening_modes.yaml`.
 
 | Factor | Balanced | Growth | Value | Low Risk |
 | --- | ---: | ---: | ---: | ---: |
-| Momentum | 0.25 | 0.35 | 0.10 | 0.15 |
-| Quality | 0.25 | 0.25 | 0.25 | 0.25 |
+| Momentum | 0.25 | 0.40 | 0.10 | 0.15 |
+| Quality | 0.25 | 0.30 | 0.25 | 0.25 |
 | Valuation | 0.20 | 0.10 | 0.35 | 0.15 |
 | Risk | 0.15 | 0.10 | 0.20 | 0.35 |
-| Sector Strength | 0.15 | 0.20 | 0.10 | 0.10 |
+| Sector Strength | 0.15 | 0.10 | 0.10 | 0.10 |
 
 Final score:
 
 ```text
 sum(applicable factor score * normalized applicable mode weight)
 ```
+
+The same renormalization occurs first inside each factor. Effective metric and
+factor weights, available components, and unavailable reasons must be emitted
+per row. Missing values are never converted to zero, and `profit_margin_raw`
+is audit-only; scoring uses the validated nullable `profit_margin` field.
+All four diagnostic mode scores remain visible for eligible rows. Value ranking
+additionally requires a non-null Valuation factor; rows without that evidence
+carry `value_eligible_for_ranking = false` and an explicit reason rather than
+being ranked after redistributing away the mode's 35% valuation weight.
 
 A high-opportunity mode may be considered later, after the four initial modes are stable and defensible.
 
@@ -369,11 +433,13 @@ outputs/      machine-readable validation, rankings, and reports
 notebooks/    exploration only; no production orchestration
 ```
 
-Likely future analytical modules:
+Implemented and planned analytical modules:
 
 ```text
 feature_pipeline.py
 scoring.py
+scoring_quality.py
+scoring_contract.py
 screening.py
 sector_analysis.py
 explanations.py

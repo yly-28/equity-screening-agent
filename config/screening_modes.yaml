@@ -1,5 +1,20 @@
+version: 1.0.0
+status: frozen_v1
+governance:
+  frozen_on: '2026-07-20'
+  evidence_run_id: phase3a_candidate_v0_2_0
+  validation_scope: distribution_coverage_and_preference_sensitivity
+  predictive_validation: not_claimed
+factor_names:
+  - momentum
+  - quality
+  - valuation
+  - risk
+  - sector_strength
+
 screening_modes:
   balanced:
+    ranking_required_factors: []
     weights:
       momentum: 0.25
       quality: 0.25
@@ -8,14 +23,17 @@ screening_modes:
       sector_strength: 0.15
 
   growth:
+    ranking_required_factors: []
     weights:
-      momentum: 0.35
-      quality: 0.25
+      momentum: 0.40
+      quality: 0.30
       valuation: 0.10
       risk: 0.10
-      sector_strength: 0.20
+      sector_strength: 0.10
 
   value:
+    ranking_required_factors:
+      - valuation
     weights:
       momentum: 0.10
       quality: 0.25
@@ -24,6 +42,7 @@ screening_modes:
       sector_strength: 0.10
 
   low_risk:
+    ranking_required_factors: []
     weights:
       momentum: 0.15
       quality: 0.25
@@ -32,5 +51,6 @@ screening_modes:
       sector_strength: 0.10
 
 notes:
-  - These weights are provisional until field coverage and sector comparability are validated.
+  - Frozen v1 removes duplicate momentum exposure and reduces Growth sector concentration identified in the full-snapshot review.
+  - Value requires a non-null Valuation factor for ranking; its diagnostic score remains visible for excluded rows.
   - Scores must renormalize over available factors instead of treating missing values as zero.

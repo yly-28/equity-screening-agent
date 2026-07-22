@@ -40,6 +40,7 @@ def _format_cik(value: object) -> str:
 def load_sp500_universe(
     cache_path: Path,
     refresh: bool = False,
+    cache_only: bool = False,
     session: Optional[requests.Session] = None,
     timeout: int = 30,
 ) -> pd.DataFrame:
@@ -51,6 +52,9 @@ def load_sp500_universe(
         missing = set(UNIVERSE_COLUMNS) - set(cached.columns)
         if not missing:
             return cached[UNIVERSE_COLUMNS].copy()
+
+    if cache_only:
+        raise UniverseDataError(f"Usable S&P 500 universe cache not found: {cache_path}")
 
     session = session or build_session(
         "equity-screening-agent/0.1 academic-data-feasibility"

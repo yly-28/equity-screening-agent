@@ -1,6 +1,6 @@
 # Equity Screening Agent: Context, Progress, and Data Policy
 
-Last updated: 2026-07-13 (Asia/Shanghai)
+Last updated: 2026-07-20 (Asia/Shanghai)
 
 This is the authoritative operational handoff for continuing the repository. It records the live project state, validation evidence, provider decisions, data-quality policy, Git state, and exact next tasks. Stable product requirements are in `PROJECT_SPEC.md`; setup and commands are summarized in `README.md`.
 
@@ -19,12 +19,21 @@ The project passed the pre-model gate:
 | Full market usability | 499/503, or 99.20%; threshold was 95% | Passed |
 | SEC sector sample | 88/88 retrieved, eight per sector | Passed |
 | SEC core extraction | 88/88 | Passed |
-| Data contract and quality rules | Providers, fields, timestamps, missingness, and validity documented | Passed for pipeline work |
-| Automated tests | 11/11 passed on 2026-07-13 | Passed |
+| Data contract and quality rules | Contract `1.0.0`, status `frozen_v1` | Passed and frozen |
+| Accepted feature matrix | 503 rows; 499 eligible, or 99.20% | Passed |
+| Automated tests | 47/47 at the Phase 2 freeze; 130/130 after Phase 3 freeze | Passed |
 
-The active phase is **Phase 2: production feature pipeline**. The next deliverable is a reproducible full-universe model matrix with a machine-readable quality audit.
+**Phase 2, the full feature-matrix pipeline and contract freeze, is complete.** The accepted run is `2026-07-13_sp500_v1_0_0` for as-of date `2026-07-13`, stored locally under `data/processed/2026-07-13_sp500_v1_0_0/`.
 
-Do not start factor scoring until that matrix passes. Do not start Streamlit, MCP, the AI agent, or LLM-generated briefs until the analytical core is stable.
+**Phase 3, the deterministic scoring kernel and method-contract freeze, is
+complete.** Factor model `1.0.0` and screening modes `1.0.0` have status
+`frozen_v1`. Accepted run `2026-07-13_sp500_scores_v1_0_2` is bound by scoring
+contract `1.0.2`; its scored-matrix SHA-256 is
+`32cb1036fc45f2eb73bbef15e7f4ad920e4585650b33722985565213f8f2ea81`.
+
+The active phase is **Phase 4: screening and structured explanations**.
+Streamlit, MCP, the AI agent, and LLM-generated briefs must still wait until
+the Phase 4 application-service contracts are stable.
 
 ## 2. Product Direction Confirmed by Validation
 
@@ -89,9 +98,9 @@ Four securities remain excluded:
 | `FDXF` | 31 daily rows | Exclude until at least 180 rows exist |
 | `HONA` | 18 daily rows | Exclude until at least 180 rows exist |
 | `Q` | 176 daily rows | Exclude until at least 180 rows exist |
-| `ECHO` | 70.2% daily move on 2025-08-26 | Exclude until reconciled with a documented corporate action |
+| `ECHO` | Verified event-driven 70.2% daily move on 2025-08-26 | Contract v1 conservatively retains the greater-than-50% exclusion rule |
 
-The three short-history cases should be reevaluated automatically on each new snapshot. The `ECHO` move may be genuine, but policy requires explanation before scoring.
+The three genuine short-history cases should be reevaluated automatically on each new snapshot. `ECHO` remains excluded in contract v1 even though its jump was verified as a real event, preserving the frozen and deliberately conservative market-quality rule.
 
 ### 3.3 SEC Stratified Audit
 
@@ -179,7 +188,7 @@ Provider pricing and policy may change, so recheck them before a future clean re
 
 - Daily market data is usable when the latest row is no more than five calendar days old, accommodating weekends and normal U.S. market holidays.
 - Annual fundamentals are usable up to 550 days after fiscal period end.
-- Stale values remain available for diagnosis but are excluded from current ranking.
+- Stale raw values may remain available for diagnosis, but every scoring metric is checked against its own period and stale values are nullified before current ranking.
 
 ### Market Eligibility
 
@@ -189,7 +198,8 @@ A security is eligible only when it has:
 - no duplicate trading dates;
 - no missing OHLCV rows;
 - positive OHLC prices;
-- no unexplained absolute daily return above 50%;
+- no absolute daily return above 50%; verified event-driven moves remain
+  conservatively excluded under contract v1;
 - a confirmed adjusted-price mode;
 - all required market features.
 
@@ -197,8 +207,9 @@ A security is eligible only when it has:
 
 - Merge XBRL synonyms by fiscal period so a stale tag cannot hide a newer equivalent.
 - Calculate ratios only from values aligned to the same fiscal period.
+- Require every non-null fundamental scoring value to have a metric-specific period no more than 550 days old.
 - Set ROE and liabilities-to-equity to null when equity is zero or negative.
-- Flag profit margins whose absolute value exceeds 100%; do not compare them blindly across sectors.
+- Preserve raw profit margin for audit, but set the scoring margin to null when its absolute value exceeds 100%.
 - Reject shares outstanding that are missing, below 100,000, or more than 550 days older than the latest fundamental period.
 - Treat free cash flow as optional where it is unavailable or economically inappropriate.
 
@@ -239,6 +250,16 @@ Factor scoring may start only after:
 - `src/http_client.py`: shared retry-aware HTTP session.
 - `src/features.py`: market feature calculations.
 - `src/unified_data.py`: provider-independent row assembly, derived proxies, flags, and schema audit.
+- `src/feature_pipeline.py`: deterministic Phase 2 orchestration, cache modes, provider failure isolation, CLI, and run metadata.
+- `src/matrix_quality.py`: contract validation, quality summaries, acceptance gates, and atomic artifact persistence.
+- `src/scoring.py`: versioned sector transforms, factor and mode aggregation,
+  accepted-input enforcement, ranking-evidence fields, and the Phase 3 CLI.
+- `src/scoring_quality.py`: scoring row accounting, score/weight/arithmetic and
+  coverage gates, independent metric/Sector Strength/component/ranking/
+  provenance recomputation, audit tables, and whole-run atomic artifacts.
+- `src/scoring_contract.py`: fail-closed loading of the frozen accepted scoring
+  artifact by identity, hashes, configuration, quality, provenance, row counts,
+  and mode-ranking state.
 
 ### Validation Modules
 
@@ -252,21 +273,37 @@ Factor scoring may start only after:
 - `config/data_contract.yaml`: row grain, providers, fields, missingness, and preprocessing.
 - `config/data_sources.yaml`: provider configuration.
 - `config/universes.yaml`: universe definitions.
-- `config/screening_modes.yaml`: provisional balanced, growth, value, and low-risk weights.
+- `config/screening_modes.yaml`: frozen v1 balanced, growth, value, and low-risk
+  weights plus ranking-evidence requirements.
+- `config/factor_model.yaml`: frozen v1 metric membership, directions,
+  derivations, applicability, preprocessing, and Sector Strength semantics.
+- `config/scoring_contract.yaml`: frozen accepted scoring-run identity, hashes,
+  versions, row counts, and ranking-eligibility counts.
 
 ### Tests
 
-Eleven tests cover provider parsing, market features, SEC extraction, coverage logic, the data contract, and unified row construction.
+One hundred thirty tests cover the Phase 1/2 provider and feature pipeline plus
+the Phase 3 configuration, direct and derived transforms, missing-aware
+aggregation, applicability, ranking-evidence gates, determinism, independent
+quality recomputation, full Phase 2 input-column projection, whole-run
+persistence, acceptance-contract loading and tamper rejection, and a fully
+local scoring CLI integration run.
 
 Latest result:
 
 ```text
-11 passed in 0.63s
+130 passed
 ```
 
 ## 7. Machine-Readable Evidence
 
 Long-term documentation is limited to `README.md`, `PROJECT_SPEC.md`, and this file. Validation artifacts remain machine-readable:
+
+- local ignored `data/processed/2026-07-13_sp500_v1_0_0/`, the accepted Phase 2 feature snapshot and quality bundle;
+- local ignored `data/processed/phase3a_candidate_v0_2_0/`, the reviewed Phase
+  3 candidate scores and quality bundle;
+- local ignored `data/processed/2026-07-13_sp500_scores_v1_0_2/`, the accepted
+  frozen v1 scoring artifact;
 
 - `outputs/pre_model_validation/market_coverage_full_summary.json`;
 - local ignored `outputs/pre_model_validation/market_coverage_full.csv`;
@@ -285,73 +322,159 @@ Repository: `equity-screening-agent`
 
 Branch: `main`
 
-Latest committed and pushed revision before the current documentation consolidation:
+Historical baseline revision at the start of the Phase 2/3 work:
 
 ```text
-de18b6b feat: establish pre-model data validation pipeline
+4cc0e4f chore: finalize data validation handoff
 ```
 
-Current local work includes:
+Do not infer the current commit or staging state from this handoff: inspect
+`git status` and `git log` before editing or publishing. Preserve all Phase 2/3
+worktree changes and never reset or discard them casually. Existing Git hygiene
+remains mandatory: `.env`, raw provider payloads, local caches, processed
+matrices, and security-level provider exports must remain untracked unless an
+explicit redistribution and version-control decision is made.
 
-- completed full-market and refreshed SEC validation summaries;
-- Phase 1 completion updates;
-- consolidation of nine Markdown files into three authoritative documents;
-- removal of generated Markdown report output in favor of existing JSON/CSV evidence.
+## 9. Completed Phase 3 Scoring Kernel
 
-Before the next commit:
+### Phase 2 Accepted Snapshot
 
-1. inspect `git status` and the full diff;
-2. rerun all tests;
-3. confirm `.env` is untracked;
-4. confirm caches and security-level provider CSVs remain ignored;
-5. commit documentation consolidation and Phase 1 completion together only if the diff is coherent.
+Phase 2 delivered the reproducible, resumable full-universe feature pipeline and froze data contract `1.0.0` with status `frozen_v1`.
 
-## 9. Active Phase: Production Feature Pipeline
+| Item | Accepted evidence |
+| --- | --- |
+| Run ID | `2026-07-13_sp500_v1_0_0` |
+| As-of date | `2026-07-13` |
+| Local artifact | `data/processed/2026-07-13_sp500_v1_0_0/` |
+| Accepted matrix SHA-256 | `1c716d9ab7b553eb363321be6d326682b0dd5ff8fc6446e376e416c79ef2a1ef` |
+| Row accounting | 503 requested and 503 persisted |
+| Eligibility | 499/503, or 99.20% |
+| Exclusions | `ECHO`, `FDXF`, `HONA`, and `Q` |
+| Provider execution | Cache-only; zero provider errors and zero market network batches |
+| Metric freshness | Zero metric-period violations and zero stale non-null violations |
+| Automated verification | 47 tests passed |
+| Phase 2 status | Complete |
 
-### Objective
+Metric-specific freshness enforcement nullified 59 stale values across 51 securities before acceptance:
 
-Build a reproducible, resumable pipeline that creates the full model-ready feature matrix under `config/data_contract.yaml`.
+| Metric | Nullified values |
+| --- | ---: |
+| Annual free cash flow | 43 |
+| Liabilities-to-equity | 8 |
+| Annual revenue | 2 |
+| Revenue growth | 2 |
+| Profit margin | 2 |
+| Annual net income | 1 |
+| ROE | 1 |
 
-### Required Work
+Required fundamental value gaps among eligible rows are limited and explicitly flagged. `APA`, `LHX`, and `PSKY` account for the three missing revenue and revenue-growth values; `PSKY` accounts for the one missing annual-net-income value; and profit margin is unavailable for those three plus `MRNA`, whose raw margin is retained for audit but excluded from scoring.
 
-1. Add `src/feature_pipeline.py`; keep orchestration out of notebooks.
-2. Load the current universe and cached SPY and security histories.
-3. Calculate every required market feature for each security.
-4. Fetch and cache SEC Company Facts for the full eligible universe with fair-access pacing.
-5. Normalize fundamentals and assemble each row through `build_unified_feature_row`.
-6. Persist a versioned Parquet matrix and a compact CSV audit under `data/processed/`.
-7. Produce JSON/CSV matrix-quality outputs covering schema validity, eligible count, field and sector missingness, freshness, flag counts, and exclusions.
-8. Add focused unit tests and one cached end-to-end integration test.
-9. Review the resulting schema and change `config/data_contract.yaml` from `validated_pending_feature_matrix` to a frozen v1 status only after the matrix passes.
+Optional eligible-row missingness accepted under the frozen contract is:
 
-### Pipeline Requirements
+| Field | Missing | Rate |
+| --- | ---: | ---: |
+| Annual free cash flow | 86 | 17.23% |
+| Shares outstanding and market-cap proxy | 40 | 8.02% |
+| Annual PE proxy | 64 | 12.83% |
+| ROE | 32 | 6.41% |
+| Liabilities-to-equity | 39 | 7.82% |
 
-- Resume after interruption.
-- Reuse exact-date caches unless explicit refresh is requested.
-- Keep provider clients modular and provider JSON internal.
-- Preserve source dates and quality flags in every row.
-- Continue when an individual security fails, recording the error and exclusion reason.
-- Never expose `.env` or raw credentials in logs.
+Revenue-basis review remains visible through quality flags: 25 broad-total material overrides, 11 source-review warnings, three source conflicts, and one lease-only basis. Every sector-metric combination has at least 10 valid observations after nullification. Communication Services annual PE is the boundary case at exactly 10 observations and must be reevaluated on every new snapshot.
 
-### Known Open Cases
+### Accepted Exclusions
 
-- Full-universe SEC extraction has not yet been run; only the 88-security stratified sample is validated.
-- `ECHO` requires corporate-action reconciliation.
-- `FDXF`, `HONA`, and `Q` need additional market history.
-- Provisional screening weights are not yet analytically validated.
-- Scoring, screening services, UI, MCP, agent, and report generation are not implemented.
+| Ticker | Accepted handling |
+| --- | --- |
+| `ECHO` | The greater-than-50% move was verified as a real event-driven price jump, but contract v1 conservatively retains the fixed threshold and excludes the row. |
+| `FDXF` | Genuine short trading history; fewer than 180 required observations. |
+| `HONA` | Genuine short trading history; fewer than 180 required observations. |
+| `Q` | Genuine short trading history; fewer than 180 required observations. |
+
+### Phase 3 Objective
+
+Implement a deterministic scoring kernel over the frozen feature matrix. It must:
+
+1. define versioned metric membership, direction, applicability, and within-factor weights;
+2. apply sector 5th/95th-percentile winsorization and 0-100 rank-percentile transforms only when a sector has at least 10 valid observations;
+3. build Momentum, Quality, Valuation, Risk, and Sector Strength scores;
+4. apply the balanced, growth, value, and low-risk mode weights from `config/screening_modes.yaml`;
+5. renormalize over available and economically applicable metrics and factors without treating missing values as zero;
+6. preserve raw values, transformed scores, effective weights, component availability, provenance, quality flags, and exclusion reasons;
+7. persist deterministic scoring artifacts and add unit, contract, edge-case, and network-disabled integration tests.
+
+Phase 3 does not include the public `screen_stocks` service, structured ranking
+explanations, Streamlit, MCP, the agent, or LLM-generated briefs.
+
+### Phase 3 Review and Accepted Evidence
+
+Candidate `0.1.0` was not frozen unchanged. Full-snapshot quantitative review
+found duplicate 3-month Momentum exposure, an absolute-FCF size signal, a
+share-volume price-level bias, excessive Growth sector concentration, and
+Value rankings without valuation evidence. Candidate `0.2.0` corrected these
+before promotion to frozen `1.0.0`:
+
+- Momentum retains 3-month total return and reserves `relative_strength_3m`
+  for Sector Strength, eliminating a 499/499 exact score duplicate.
+- Quality uses exact-period free-cash-flow margin instead of absolute FCF. It
+  has 327/361 coverage in applicable sectors; `RL` is correctly unavailable
+  because its FCF and revenue periods differ.
+- Risk removes share volume. Liquidity stays a Phase 4 filter until a later
+  data contract can supply true mean daily dollar volume.
+- Growth shifts 10 percentage points from Sector Strength to Momentum and
+  Quality. Its Top-50 expanded from six sectors to ten, with at most 12 names
+  from one sector.
+- Value retains a diagnostic score but requires a Valuation factor for ranking;
+  435/499 eligible rows satisfy that evidence gate and its Top-50 contains zero
+  rows without Valuation.
+
+Accepted run `2026-07-13_sp500_scores_v1_0_2` consumed the frozen Phase 2
+snapshot locally and produced 503 scored rows:
+
+| Check | Accepted evidence |
+| --- | --- |
+| Model/config | Factor model `1.0.0`; screening modes `1.0.0`; both `frozen_v1` |
+| Accepted scored SHA-256 | `32cb1036fc45f2eb73bbef15e7f4ad920e4585650b33722985565213f8f2ea81` |
+| Eligible/ineligible | 499/4; all ineligible metric, factor, and mode scores are null |
+| Diagnostic mode completeness | All 499 eligible rows have all four mode scores |
+| Ranking eligibility | Balanced 499, Growth 499, Value 435, Low Risk 499 |
+| Sector coverage | Zero insufficient applicable sector-metric combinations; Communication Services PE is 10/22 |
+| Factor availability | Momentum 499, Quality 498, Valuation 435, Risk 499, Sector Strength 499 |
+| Independent quality gates | Zero transform, Sector Strength, component, input-projection, numeric-evidence dtype, ranking, provenance, or coverage violations |
+| Determinism | Scored Parquet and all four review tables matched a second v1 run byte-for-byte |
+| Tests | 130 passed |
+
+The only accepted scoring warning is eligible factor missingness. `PSKY` has no
+Quality or Valuation factor, but diagnostic mode scores disclose and use
+renormalized Momentum, Risk, and Sector Strength weights; it is not eligible
+for Value ranking. `MRNA`'s audit-only raw margin does not enter scoring.
+
+### Remaining Limitations After the Freeze
+
+- Communication Services annual PE has exactly the minimum 10 valid
+  observations and must be reevaluated on each new snapshot.
+- Sector Strength has only 11 sector-level ranks; raw sector medians and member
+  counts remain mandatory alongside the score.
+- This is a one-snapshot method-contract validation, not a backtest or evidence
+  of future-return prediction. A new methodology requires a new version rather
+  than mutating frozen v1.
+- Custom-target scoring against the accepted reference is supported by the
+  kernel, but a public custom-universe workflow is not yet validated.
+- Screening services, explanations, UI, MCP, agent, and report generation are
+  not implemented.
 
 ## 10. Remaining Roadmap
 
-### Phase 3: Factor Scoring
+### Phase 3: Scoring Kernel (Complete)
 
-1. Implement sector winsorization and percentile transforms.
-2. Build Momentum, Quality, Valuation, Risk, and Sector Strength components.
-3. Apply configured mode weights and missing-aware renormalization.
-4. Preserve metric-level contribution details and exclusion reasons.
-5. Test ranking stability under missing data, small input changes, and sector edge cases.
+1. Completed: sector winsorization and percentile transforms.
+2. Completed: Momentum, Quality, Valuation, Risk, and Sector Strength components.
+3. Completed: configured mode weights and two-level missing-aware renormalization.
+4. Completed: metric inputs, transformed values, components, effective weights,
+   reasons, provenance, and exclusions in deterministic artifacts.
+5. Completed: quantitative distribution/preference review, model revision,
+   frozen v1 configs, accepted scoring contract, and byte-exact determinism.
 
-### Phase 4: Screening and Explanations
+### Phase 4: Screening and Explanations (Active)
 
 1. Implement `screen_stocks` with universe, mode, sector, liquidity, and top-N filters.
 2. Produce structured strengths, risks, warnings, and next research questions.
@@ -408,6 +531,24 @@ Stratified SEC audit:
 .venv/bin/python -m src.sec_coverage --as-of 2026-07-13 --per-sector 8
 ```
 
+Reproduce the accepted Phase 2 snapshot entirely from exact-date caches without overwriting the accepted run directory:
+
+```bash
+.venv/bin/python -m src.feature_pipeline \
+  --as-of 2026-07-13 \
+  --cache-only \
+  --run-id phase2_reproduction_2026-07-13
+```
+
+Reproduce frozen Phase 3 scoring under a new run ID without overwriting the
+accepted scoring directory:
+
+```bash
+.venv/bin/python -m src.scoring \
+  --input-run data/processed/2026-07-13_sp500_v1_0_0 \
+  --run-id phase3_reproduction_contract_v1_0_2
+```
+
 Tests:
 
 ```bash
@@ -428,8 +569,27 @@ Read in order:
 
 Then inspect the actual worktree before editing. Preserve local caches and user changes. Do not expose `.env`. Do not replace the approved provider stack unless a documented requirement fails.
 
+Do not reimplement Phase 2 or Phase 3: their pipelines, quality layers, frozen
+contracts, accepted artifacts, CLIs, and tests already exist in the current
+uncommitted worktree.
+
 Immediate assignment:
 
-> Complete Phase 2 by building and validating the resumable full-universe feature pipeline. Preserve provenance and quality flags, add proportionate tests, and do not begin factor scoring, MCP, Agent, Streamlit, or LLM work until the model-ready matrix passes its quality audit.
+> Begin Phase 4 from the verified artifact returned by
+> `src.scoring_contract.load_accepted_scoring_run`. Implement a deterministic
+> `screen_stocks` application service with universe/mode/sector/liquidity/top-N
+> filters, enforce each mode's ranking-eligibility flag, and return structured
+> strengths, risks, missing inputs, warnings, factor breakdown, and reason
+> codes. Do not read arbitrary scored Parquet files directly.
 
-Use subagents only for independent, bounded parallel work such as contract review, test-gap analysis, or output-quality auditing. Keep pipeline integration and final verification in the main thread.
+Phase 4 sequence:
+
+1. Define request/response schemas and deterministic tie-breaking.
+2. Implement mode-specific ranking eligibility, filters, and top-N selection.
+3. Implement structured evidence and explanation reason codes without an LLM.
+4. Add stock-detail, comparison, market-overview, and sector-summary services.
+5. Keep UI, MCP, Agent, and LLM work in their planned order.
+
+Use subagents only for independent, bounded parallel work such as service-
+contract review, ranking edge-case analysis, or test-gap auditing. Keep Phase 4
+integration and final verification in the main thread.

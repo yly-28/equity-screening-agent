@@ -1,0 +1,34 @@
+scoring_contract:
+  version: 1.0.2
+  status: frozen_v1
+  frozen_on: '2026-07-20'
+  accepted_run_id: 2026-07-13_sp500_scores_v1_0_2
+  accepted_run_path: data/processed/2026-07-13_sp500_scores_v1_0_2
+  accepted_as_of_date: '2026-07-13'
+  accepted_scored_matrix_sha256: 32cb1036fc45f2eb73bbef15e7f4ad920e4585650b33722985565213f8f2ea81
+  accepted_scoring_quality_sha256: 4d46bf2f0e30c8d3d93b5a1708fe0177baa85308cbf687073273a3ca02495b02
+  accepted_run_metadata_sha256: 5ce18dd28c70ca27235fe05d605b87f1cb0741090602229da8d464c2a1df019d
+  accepted_metric_sector_coverage_sha256: 3abeb1a159436f3a216b27503cb55e85354bd73c914e2d015c22eb046850f1b1
+  input_feature_run_id: 2026-07-13_sp500_v1_0_0
+  input_contract_version: 1.0.0
+  input_feature_matrix_sha256: 1c716d9ab7b553eb363321be6d326682b0dd5ff8fc6446e376e416c79ef2a1ef
+  factor_model_version: 1.0.0
+  factor_config_sha256: b368d7df847a73c21da3c52a7ea6d44f938f10bbeec23e6c886c1ee591cdf817
+  screening_modes_version: 1.0.0
+  modes_config_sha256: 1cb1425eb94f91d6fb4d2c895ed66c83cd89a8251f53c78f86e367a265eaa309
+  row_count: 503
+  eligible_count: 499
+  mode_names:
+    - balanced
+    - growth
+    - value
+    - low_risk
+  mode_ranking_eligible_counts:
+    balanced: 499
+    growth: 499
+    value: 435
+    low_risk: 499
+  accepted_warnings:
+    - eligible_factor_missingness_present
+  validation_scope: deterministic_cross_sectional_methodology
+  predictive_validation: not_claimed

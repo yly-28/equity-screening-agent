@@ -1,0 +1,107 @@
+version: 1.0.0
+status: frozen_v1
+
+governance:
+  frozen_on: '2026-07-20'
+  evidence_run_id: phase3a_candidate_v0_2_0
+  validation_scope: deterministic_cross_sectional_methodology
+  predictive_validation: not_claimed
+
+source:
+  reference:
+    config_path: config/data_contract.yaml
+    run_id_field: contract.accepted_run_id
+    as_of_date_field: contract.accepted_as_of_date
+  row_scope: full_eligible_snapshot
+  row_filter:
+    field: eligible_for_scoring
+    equals: true
+
+preprocessing:
+  comparison_group: sector
+  winsorization:
+    lower_percentile: 5
+    upper_percentile: 95
+    interpolation: linear
+  percentile_rank:
+    tie_method: average
+    endpoint_formula: (rank - 1) / (n - 1) * 100
+    constant_value_score: 50
+    minimum_valid_observations: 10
+
+factor_aggregation:
+  metric_weighting: equal
+  minimum_available_metrics: 1
+  missing_policy: renormalize_over_available_metrics
+
+factors:
+  momentum:
+    display_name: Momentum
+    metrics:
+      return_1m: {direction: higher}
+      return_3m: {direction: higher}
+      return_6m: {direction: higher}
+      ma20_gap: {direction: higher}
+      ma50_gap: {direction: higher}
+      volume_trend: {direction: higher}
+
+  quality:
+    display_name: Quality
+    metrics:
+      revenue_growth: {direction: higher}
+      profit_margin: {direction: higher}
+      roe: {direction: higher}
+      free_cash_flow_margin:
+        direction: higher
+        derivation:
+          operation: ratio
+          numerator: annual_free_cash_flow
+          denominator: annual_revenue
+          denominator_policy: positive_only
+          period_alignment:
+            left: free_cash_flow_period_end
+            right: annual_revenue_period_end
+            policy: exact
+        applicability:
+          default: applicable
+          inapplicable_sectors:
+            - Financials
+            - Real Estate
+            - Utilities
+
+  valuation:
+    display_name: Valuation
+    metrics:
+      annual_pe_proxy: {direction: lower}
+
+  risk:
+    display_name: Risk
+    score_interpretation: higher_score_means_lower_risk
+    quality_warning_policy: no_numeric_penalty
+    metrics:
+      volatility_20d: {direction: lower}
+      volatility_60d: {direction: lower}
+      beta_1y: {direction: lower}
+      liabilities_to_equity: {direction: lower}
+      max_drawdown_1y: {direction: higher}
+
+  sector_strength:
+    display_name: Sector Strength
+    score_interpretation: higher_score_means_stronger_sector
+    source_metric: relative_strength_3m
+    source_rows: eligible_only
+    sector_aggregation: median
+    minimum_sector_members: 10
+    cross_sector_ranking:
+      universe: valid_sectors_only
+      method: rank_percentile
+      direction: higher
+      tie_method: average
+      minimum_valid_sectors: 2
+      endpoint_formula: (rank - 1) / (n - 1) * 100
+
+notes:
+  - Three-month total return remains in Momentum; relative_strength_3m is reserved for Sector Strength to avoid duplicate percentile exposure.
+  - Free-cash-flow margin is derived only from positive revenue and exact matching annual periods.
+  - Share volume is not a Risk input; liquidity remains a downstream filter until true average dollar volume is added in a future data-contract version.
+  - Frozen v1 records a deterministic scoring methodology, not evidence of future return prediction.
