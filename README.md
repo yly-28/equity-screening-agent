@@ -10,7 +10,9 @@ Phase 1 data feasibility validation is complete:
 - 499/503, or 99.20%, passed the market usability gate.
 - SEC Company Facts retrieval and core extraction passed for a stratified 88-security, 11-sector sample.
 - The automated suite had 47 passing tests at the Phase 2 freeze, 130 after the
-  Phase 3 freeze, and now has 165 after the Phase 4 screening service.
+  Phase 3 freeze, 165 after the Phase 4 screening service, 175 after the
+  Phase 5 screener, and now has 214 after the completed Phase 5 product
+  surface.
 
 Phase 2 is complete. Data contract `1.0.0` is frozen with status `frozen_v1`. The accepted cache-only run is `2026-07-13_sp500_v1_0_0` for as-of date `2026-07-13`, stored locally under `data/processed/2026-07-13_sp500_v1_0_0/`. It retained all 503 securities, produced 499 eligible rows (99.20%), and excluded `ECHO`, `FDXF`, `HONA`, and `Q`. The run had zero provider errors, zero market network batches, and zero metric-period or stale-non-null violations.
 
@@ -26,8 +28,16 @@ flags alone.
 Phase 4 is complete. The deterministic `screen_stocks` service filters and
 ranks only the verified accepted scoring run and returns structured evidence,
 exclusions, and research questions without rescoring a filtered subset.
-The active phase is Phase 5, the minimal product surface. Streamlit, MCP, the
-agent, and LLM-generated briefs have not yet been implemented.
+Phase 5 is complete. The operational Streamlit application in
+`app/stock_screener.py` provides separate Stock Screener and Stock Detail
+views over `screen_stocks` and `get_stock_detail`. The UI performs no loading,
+filtering, scoring, ranking, or evidence derivation. Phase 6 MCP is next; the
+agent and LLM-generated briefs have not been implemented.
+
+The completed Phase 5 implementation is published on
+`agent/phase-5-streamlit-screener` (implementation commit
+`1bd93489a8a2be2d5166b829f7edfd376205310c`). No Phase 5 pull request has
+been opened.
 
 ## Documentation
 
@@ -222,13 +232,177 @@ explicit stage and reason, including mode eligibility, requested filters, or
 `average_volume_20d` is labeled as 20-day average share volume, not dollar
 liquidity.
 
-## Tests
+## Phase 5 Streamlit Product Surface (Complete)
+
+Install the pinned dependencies, keep the accepted Phase 2 and Phase 3
+artifacts in their frozen local paths, and launch from the repository root:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest
+.venv/bin/streamlit run app/stock_screener.py
 ```
 
-Latest result: `165 passed`, including 35 focused screening-service tests.
+The sidebar switches between two deterministic views. The Stock Screener form
+maps directly to:
+
+```text
+universe
+custom_tickers
+mode
+sectors
+minimum_price
+minimum_market_cap_proxy
+minimum_average_volume_20d
+top_n
+```
+
+The Screener view calls `src.screening.screen_stocks` once per submitted form.
+It does
+not open Parquet, call providers, normalize tickers, validate or filter rows,
+recompute scores or weights, or change result order. It displays the accepted
+run and as-of date, active filters, ranked identities, selected-mode and factor
+scores, effective weights, sources and dates, missing inputs, warnings,
+strengths, risks, reason codes, research questions, unknown custom tickers,
+and every explicit exclusion. Validation, accepted-data, and scoring-contract
+errors are shown without a user-facing traceback.
+
+`market_cap_proxy` is visibly labeled as a proxy, `average_volume_20d` is
+20-day average share volume, and a higher Risk score means lower measured
+risk. `.streamlit/config.toml` disables Streamlit usage telemetry, so the
+local app remains network-independent.
+
+Operational limitations:
+
+- The ignored accepted Phase 2 and Phase 3 artifacts must exist and pass their
+  frozen contracts.
+- Each submission independently verifies the accepted bundle and takes about
+  3.3 seconds on the current machine; the UI deliberately adds no cache.
+- Custom tickers are limited to securities already present in the accepted
+  S&P 500 snapshot. The app never fetches or scores an unknown ticker.
+- Large `top_n` values create correspondingly large detail and exclusion
+  tables.
+- `streamlit==1.50.0` is pinned because the current environment is Python
+  3.9.6. Raise the Python floor and upgrade Streamlit before any broader
+  deployment; this deliverable is local-only.
+- Comparison, market summary, MCP, agent, LLM, and research-brief work remain
+  unimplemented. The next assignment is the minimal Phase 6 MCP adapter over
+  the completed deterministic services.
+
+The verified headless server smoke command is:
+
+```bash
+.venv/bin/streamlit run app/stock_screener.py \
+  --server.headless true \
+  --server.address 127.0.0.1 \
+  --server.port 8765 \
+  --server.fileWatcherType none \
+  --browser.gatherUsageStats false
+```
+
+Its local `/_stcore/health` endpoint returned `ok`. A network-blocked AppTest
+submission against the real accepted run also rendered Value results for
+`ALL` and `ESS`, reported `UNKNOWN` separately, and showed explicit
+mode-eligibility exclusions for `ECHO` and `PSKY`.
+
+### Stock Detail
+
+The dedicated application service is:
+
+```python
+from src.stock_detail import get_stock_detail
+
+result = get_stock_detail(ticker="ALL", mode="value")
+```
+
+It accepts only a ticker and one of the four frozen screening modes. It
+normalizes and validates those inputs, loads the accepted scoring bundle once
+through `load_accepted_scoring_run`, and projects one exact accepted row. It
+does not accept a run path or arbitrary as-of date, call `screen_stocks`,
+create a one-ticker rank, access provider caches, or recompute any feature,
+factor, score, transform, weight, or sector statistic.
+
+The Stock Detail view shows:
+
+- accepted run, as-of date, contract versions, identity, sector, and industry;
+- the selected mode's stored diagnostic score, ranking eligibility, reasons,
+  available factors, and effective factor weights;
+- latest price, market-cap proxy, 20-day average share volume, verified history
+  coverage, and the complete stored market-feature snapshot;
+- fundamentals with units, contract-backed metric periods, the snapshot-wide
+  latest filing date, source tags, warnings, validated profit margin, and
+  audit-only raw margin;
+- all five stored factor scores plus every metric's raw value, scoring input,
+  winsorized value, stored score, availability, unavailable reason, and
+  effective metric weight;
+- stored Sector Strength context, quality evidence, missing inputs, warnings,
+  base and mode exclusions, strengths, risks, reason codes, and next research
+  questions.
+
+Known but mode-ineligible securities remain inspectable. For example, `PSKY`
+under Value mode retains its diagnostic Value score while separately reporting
+`missing_required_factor:valuation`. Base-ineligible securities such as `ECHO`
+retain identity, market evidence, missing inputs, warnings, and exclusion
+reasons instead of being reduced to a sparse screening exclusion.
+
+The frozen accepted artifact contains a one-row feature snapshot per security,
+not daily OHLCV rows. Stock Detail therefore displays verified history
+start/end dates, row count, latest price, returns, volatility, drawdown, moving
+average gaps, relative strength, and beta, and explicitly states that a price
+chart is unavailable. Reading the unverified provider cache to manufacture a
+chart would violate the accepted boundary. The artifact also contains no
+stored global rank, so the detail service does not invent one.
+
+The accepted-run smoke rendered `ALL` in Value mode, verified `PSKY`'s
+diagnostic Value score and ranking exclusion separately, and verified `ECHO`'s
+base ineligibility and quality evidence. Unknown tickers fail clearly and are
+never fetched.
+
+## Tests
+
+Run the deterministic Streamlit boundary tests:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_stock_screener_app.py
+```
+
+Latest targeted result: `10 passed`.
+
+Run the Stock Detail service tests:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_stock_detail.py
+```
+
+Latest targeted result: `30 passed`.
+
+Run the Stock Detail UI-boundary tests:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_stock_detail_app.py
+```
+
+Latest targeted result: `9 passed`.
+
+Run the complete Phase 4/5 application boundary:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_screening.py tests/test_stock_detail.py \
+  tests/test_stock_screener_app.py tests/test_stock_detail_app.py
+```
+
+Latest focused result: `84 passed` (`35` screening-service, `30` Stock Detail
+service, `10` screener UI, and `9` Stock Detail UI tests).
+
+Run the complete repository suite:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q
+```
+
+Latest full result: `214 passed`.
 
 ## Approved Data Boundary
 

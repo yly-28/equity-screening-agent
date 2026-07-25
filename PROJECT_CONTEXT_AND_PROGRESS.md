@@ -1,6 +1,6 @@
 # Equity Screening Agent: Context, Progress, and Data Policy
 
-Last updated: 2026-07-22 (Asia/Shanghai)
+Last updated: 2026-07-25 (Asia/Shanghai)
 
 This is the authoritative operational handoff for continuing the repository. It records the live project state, validation evidence, provider decisions, data-quality policy, Git state, and exact next tasks. Stable product requirements are in `PROJECT_SPEC.md`; setup and commands are summarized in `README.md`.
 
@@ -21,7 +21,7 @@ The project passed the pre-model gate:
 | SEC core extraction | 88/88 | Passed |
 | Data contract and quality rules | Contract `1.0.0`, status `frozen_v1` | Passed and frozen |
 | Accepted feature matrix | 503 rows; 499 eligible, or 99.20% | Passed |
-| Automated tests | 47/47 at Phase 2; 130/130 at Phase 3; 165/165 after Phase 4 | Passed |
+| Automated tests | 47/47 at Phase 2; 130/130 at Phase 3; 165/165 after Phase 4; 175/175 after the Phase 5 screener; 214/214 after completed Phase 5 | Passed |
 
 **Phase 2, the full feature-matrix pipeline and contract freeze, is complete.** The accepted run is `2026-07-13_sp500_v1_0_0` for as-of date `2026-07-13`, stored locally under `data/processed/2026-07-13_sp500_v1_0_0/`.
 
@@ -36,9 +36,11 @@ The public `screen_stocks` service reads only the verified accepted scoring run,
 preserves stored scores and weights, returns explicit exclusion evidence, and
 has 35 focused tests.
 
-The active phase is **Phase 5: minimal product surface**. The next implementation
-is a minimal Streamlit Stock Screener over the stable application service.
-MCP, the AI agent, and LLM-generated briefs remain later work.
+**Phase 5, the minimal product surface, is complete.** The operational
+Streamlit application provides separate Stock Screener and Stock Detail views
+over stable, accepted-run-only application services. The next phase is
+**Phase 6: MCP**. Comparison, market summary, the AI agent, and LLM-generated
+briefs remain later work.
 
 ## 2. Product Direction Confirmed by Validation
 
@@ -271,6 +273,13 @@ Factor scoring may start only after:
   explicit exclusions, and JSON-ready evidence projection.
 - `src/explanations.py`: deterministic, non-LLM strengths, risks, reason
   evidence, and next-research-question helpers over stored factor scores.
+- `src/stock_detail.py`: deterministic Phase 5 single-security application
+  service over the same accepted loader, including stored market, fundamental,
+  factor-component, eligibility, sector, quality, and explanation evidence.
+- `app/stock_screener.py`: sole Phase 5 Streamlit entry point with separate
+  Stock Screener and Stock Detail views. It maps controls directly to the two
+  application services and renders responses without analytical logic or
+  result-order changes.
 
 ### Validation Modules
 
@@ -290,21 +299,42 @@ Factor scoring may start only after:
   derivations, applicability, preprocessing, and Sector Strength semantics.
 - `config/scoring_contract.yaml`: frozen accepted scoring-run identity, hashes,
   versions, row counts, and ranking-eligibility counts.
+- `.streamlit/config.toml`: disables Streamlit usage telemetry so the local
+  application remains network-independent.
 
 ### Tests
 
-One hundred sixty-five tests cover the Phase 1/2 provider and feature pipeline,
-the Phase 3 scoring and acceptance contracts, and the Phase 4 screening
-service. The 35 screening tests cover normal ranking, all numeric and sector
-filters, Value ranking eligibility, deterministic ties, missing filter values,
-custom ticker normalization, unknown tickers, clear invalid-input errors,
-eligibility-before-filter ordering, stored-score preservation, row-order
-invariance, explicit top-N exclusions, and network/direct-Parquet independence.
+Two hundred fourteen tests cover the Phase 1/2 provider and feature pipeline,
+the Phase 3 scoring and acceptance contracts, the Phase 4 screening service,
+and the completed Phase 5 product surface. The 35 screening tests cover normal
+ranking, all numeric and sector filters, Value ranking eligibility,
+deterministic ties, missing filter values, custom ticker normalization,
+unknown tickers, clear invalid-input errors, eligibility-before-filter
+ordering, stored-score preservation, row-order invariance, explicit top-N
+exclusions, and network/direct-Parquet independence.
+
+Ten network-disabled Streamlit boundary tests verify exact mapping of all eight
+controls, raw custom-ticker pass-through, unchanged result identity/order/
+scores/exclusions, the single `screen_stocks` data boundary, disabled usage
+telemetry, accepted run/date and complete evidence rendering, validation/data/
+contract errors without an internal traceback, empty results, unknown tickers,
+warnings, and exclusions. The combined Phase 4/5 application boundary has 45
+tests before Stock Detail.
+
+Thirty network-disabled Stock Detail service tests verify input normalization,
+all four modes, exact accepted-loader use, full stored metric/factor/weight/
+eligibility projection, strict JSON null handling, mode- and base-ineligible
+securities, unknown and malformed data, no `screen_stocks`/Parquet/provider
+bypass, frame preservation, terminology, truthful date provenance, and the
+explicit absence of a daily price series. Nine additional AppTests verify
+navigation, exact ticker/mode forwarding, dedicated service isolation,
+unchanged row/value order, complete evidence rendering, and clean known-error
+surfaces. The complete Phase 4/5 application boundary has 84 tests.
 
 Latest result:
 
 ```text
-165 passed
+214 passed
 ```
 
 ## 7. Machine-Readable Evidence
@@ -332,26 +362,43 @@ Long-term documentation is limited to `README.md`, `PROJECT_SPEC.md`, and this f
 
 Repository: `equity-screening-agent`
 
-Branch: `main`
+Current local branch: `agent/phase-5-streamlit-screener`
 
 GitHub remote: `https://github.com/yly-28/equity-screening-agent.git`
 
-Published Phase 2/3 baseline:
+Published `main` baseline:
 
 ```text
-eddf33d feat: complete phase 2 and phase 3 pipelines
+2dbc4301caa0dd64ea5ce4efaee5af380f71fe5c
 ```
 
-Commit `eddf33d` was pushed to `origin/main` on 2026-07-22. It contains the
-complete Phase 2 feature pipeline, Phase 3 scoring and quality layers, frozen
-contracts, documentation, and the 130-test suite. The accepted Phase 2 and
-Phase 3 processed runs are intentionally ignored local artifacts and are not in
-Git.
+Commit `2dbc4301` is the merge commit for Phase 4 PR #1. It includes the
+previous `eddf33d` Phase 1-3 baseline plus the completed screening service,
+deterministic explanation helpers, and 35 focused Phase 4 tests, bringing the
+suite at that point to 165 passing tests. The accepted Phase 2 and Phase 3
+processed runs are intentionally ignored local artifacts and are not in Git.
 
-The Phase 4 publication branch `agent/complete-phase-4-screening` adds the
-completed screening service, deterministic explanation helpers, and 35 focused
-tests, bringing the suite to 165 passing tests. It is published through a draft
-pull request and is not part of `main` until that pull request is merged.
+GitHub state verified on 2026-07-25:
+
+- Phase 4 local and former PR head:
+  `e55b65b4fce887ec206b82d2ba6d284b01f4343b`;
+- PR #1:
+  `https://github.com/yly-28/equity-screening-agent/pull/1`;
+- PR #1 state: MERGED at `2026-07-25T05:16:47Z`;
+- PR #1 merge commit and current `main`:
+  `2dbc4301caa0dd64ea5ce4efaee5af380f71fe5c`;
+- completed Phase 5 implementation commit:
+  `1bd93489a8a2be2d5166b829f7edfd376205310c`; and
+- published Phase 5 branch:
+  `agent/phase-5-streamlit-screener`.
+
+The Phase 5 branch was created directly from `e55b65b` while PR #1 was still
+unmerged, so its history is explicitly stacked on the Phase 4 head. GitHub
+merged PR #1 into `main` later; the Phase 5 branch was not reset or rebased,
+which preserved all completed work. The Phase 5 screener, Stock Detail
+service/view, telemetry setting, pinned dependency, deterministic tests, and
+documentation are committed and published on that branch. No Phase 5 pull
+request has been opened.
 
 Every new session must still run `git status -sb` and `git log -1 --oneline`
 before editing because this handoff file itself or later work may be newer than
@@ -493,16 +540,37 @@ for Value ranking. `MRNA`'s audit-only raw margin does not enter scoring.
   reduce a filtered result set.
 - Every known candidate ticker not returned carries an explicit exclusion
   record, including `outside_top_n`. This is audit-friendly but can make
-  full-universe response payloads large; UI/MCP adapters may later need summary
-  or pagination.
+  full-universe response payloads large. The Streamlit screener currently
+  renders the complete exclusion table and has no pagination.
 - The accepted loader independently revalidates the full frozen scoring bundle
   on each service call. This preserves the fail-closed boundary but has no
-  cross-call performance cache yet.
+  cross-call performance cache. A submitted Streamlit screen or detail request
+  takes about 3.3 seconds on the current machine.
 - Structured strengths, risks, and research questions are deterministic rules
   over stored evidence. High/low factor evidence currently uses fixed 70/30
   score thresholds; it is not causal analysis or LLM-authored investment advice.
-- The screening service is implemented; UI, MCP, agent, comparison, stock
-  detail, market summaries, and report generation are not yet implemented.
+- The Streamlit application requires the ignored accepted Phase 2 and Phase 3
+  artifacts in their frozen local paths. Neither view has a run-path or
+  arbitrary as-of selector, and neither fetches an unknown ticker.
+- Large `top_n` values produce large detail and exclusion surfaces because the
+  screener deliberately has no pagination.
+- The accepted artifact stores one feature row per security, not daily OHLCV
+  rows. Stock Detail truthfully displays verified history coverage, latest
+  price, and derived market features, but no price chart. It never reads
+  unverified provider caches to manufacture a series.
+- The accepted artifact stores no global rank. Stock Detail shows the selected
+  mode's diagnostic score, eligibility, and reasons without inventing a
+  one-ticker rank.
+- `fundamental_filed_date` is the latest filing date across included accepted
+  fundamental inputs, not a metric-specific filing date. Stock Detail exposes
+  it as snapshot-wide and assigns metric periods only where the frozen
+  contract guarantees them.
+- Streamlit `1.50.0` is the last release compatible with the current Python
+  3.9.6 environment. Raise the Python floor and upgrade Streamlit before a
+  broader deployment; this deliverable is local-only.
+- The operational Screener and dedicated Stock Detail services/views are
+  implemented. Comparison, market summaries, MCP, agent, LLM, and report
+  generation are not yet implemented.
 
 ## 10. Remaining Roadmap
 
@@ -558,18 +626,42 @@ The completed service:
 Accepted-run review reproduced Balanced leaders `ALL`, `KLAC`, and `PGR`, and
 Value leaders `ACGL`, `ALL`, and `MO`. A stored Value tie was resolved
 deterministically as `D` rank 84 and `ES` rank 85. Thirty-five focused tests and
-the full 165-test suite pass.
+the full 165-test suite passed at Phase 4 completion.
 
-### Phase 5: Minimal Product Surface
+### Phase 5: Minimal Product Surface (Complete)
 
-1. Build the Stock Screener first.
-2. Build Stock Detail second.
-3. Show source names, data dates, fiscal periods, missing fields, and warnings.
-4. Add market/sector views only after ranking outputs are stable.
+1. Complete: the single-page Streamlit Stock Screener maps all eight controls
+   directly to `screen_stocks`, renders ranked companies and full evidence in
+   service order, reports unknown tickers and explicit exclusions separately,
+   catches known request/data/contract errors without a user traceback, and
+   performs no direct accepted-run, Parquet, provider, filtering, scoring,
+   normalization, or reranking work.
+2. Complete: Streamlit `1.50.0` is the only new direct dependency, usage
+   telemetry is disabled, and 10 network-disabled UI-boundary tests pass.
+3. Complete: a network-blocked accepted-run AppTest rendered `ALL` and `ESS`
+   under Value mode, separated `UNKNOWN`, and showed explicit `ECHO`/`PSKY`
+   exclusions. The headless server health endpoint also returned `ok`.
+4. Complete: `get_stock_detail(ticker, mode)` loads the accepted bundle once,
+   returns one exact security with stored mode eligibility, market and
+   fundamental evidence, five factors and every metric component, sector
+   context, dates, quality, explanations, and explicit limitations. It never
+   calls `screen_stocks`, creates a rank, or reads provider caches.
+5. Complete: the dedicated Streamlit view forwards only raw ticker and mode,
+   preserves service order/values, handles known errors without a traceback,
+   and keeps mode-ineligible and base-ineligible securities inspectable.
+6. Complete: 30 Stock Detail service tests, 9 Stock Detail AppTests, 84
+   combined Phase 4/5 boundary tests, and 214 full tests pass. A
+   network-blocked accepted-run AppTest rendered `PSKY` Value and `ECHO`
+   Balanced with no exception or network access.
+7. Deferred: true daily price history requires a separately validated local
+   history contract. Comparison and market/sector views remain later work.
 
 ### Phase 6: MCP
 
-Expose tested application services as narrow MCP tools. Return normalized project schemas, not provider payloads.
+Next: expose the completed deterministic application services as narrow MCP
+tools. Start with `screen_stocks` and `get_stock_detail`, return normalized
+project schemas rather than provider payloads, and preserve the accepted-run
+and no-recomputation boundaries.
 
 ### Phase 7: Agent and Research Briefs
 
@@ -629,11 +721,72 @@ accepted scoring directory:
   --run-id phase3_reproduction_contract_v1_0_2
 ```
 
-Tests:
+Launch the local Streamlit application:
 
 ```bash
-PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest
+.venv/bin/streamlit run app/stock_screener.py
 ```
+
+The verified headless server smoke used:
+
+```bash
+.venv/bin/streamlit run app/stock_screener.py \
+  --server.headless true \
+  --server.address 127.0.0.1 \
+  --server.port 8765 \
+  --server.fileWatcherType none \
+  --browser.gatherUsageStats false
+curl -fsS http://127.0.0.1:8765/_stcore/health
+```
+
+The health endpoint returned `ok`. `.streamlit/config.toml` disables usage
+telemetry for the normal launch command as well. The sidebar selects Stock
+Screener or Stock Detail.
+
+Streamlit boundary tests:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_stock_screener_app.py
+```
+
+Latest result: `10 passed`.
+
+Stock Detail service tests:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_stock_detail.py
+```
+
+Latest result: `30 passed`.
+
+Stock Detail UI-boundary tests:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_stock_detail_app.py
+```
+
+Latest result: `9 passed`.
+
+Combined Phase 4/5 application-boundary tests:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
+  tests/test_screening.py tests/test_stock_detail.py \
+  tests/test_stock_screener_app.py tests/test_stock_detail_app.py
+```
+
+Latest result: `84 passed`.
+
+Full suite:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q
+```
+
+Latest result: `214 passed`.
 
 Do not add `--refresh` casually. Confirm credits, expected runtime, and the need for a new snapshot first.
 
@@ -644,11 +797,16 @@ Read in order:
 1. this file;
 2. `README.md`;
 3. `PROJECT_SPEC.md`;
-4. `config/data_contract.yaml`;
-5. `config/factor_model.yaml`, `config/screening_modes.yaml`, and
+4. `requirements.txt` and `.streamlit/config.toml`;
+5. `config/data_contract.yaml`;
+6. `config/factor_model.yaml`, `config/screening_modes.yaml`, and
    `config/scoring_contract.yaml`;
-6. `src/scoring_contract.py`, `src/screening.py`, `src/explanations.py`, and
-   relevant tests.
+7. `src/scoring_contract.py`, `src/screening.py`, `src/stock_detail.py`, and
+   `src/explanations.py`;
+8. `app/stock_screener.py`; and
+9. `tests/test_screening.py`, `tests/test_stock_detail.py`,
+   `tests/test_stock_screener_app.py`, `tests/test_stock_detail_app.py`, and
+   relevant accepted-loader tests.
 
 Start with these checks:
 
@@ -658,9 +816,12 @@ git log -1 --oneline
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q
 ```
 
-The published baseline remains commit `eddf33d` on `main` with 130 Phase 1-3
-tests. The current Phase 4 worktree should report `165 passed`. On this machine,
-the accepted local run should be
+The published `main` baseline is Phase 4 merge commit `2dbc4301`, and PR #1 is
+merged. The published Phase 5 branch remains a direct descendant of Phase 4
+head `e55b65b`; its verified implementation commit is `1bd9348`, followed by
+this documentation handoff. It contains the completed Streamlit Screener and
+Stock Detail work and should report `214 passed`. No Phase 5 pull request has
+been opened. On this machine, the accepted local run should be
 `data/processed/2026-07-13_sp500_scores_v1_0_2/`. If it is absent, do not weaken
 the loader or point it at an arbitrary candidate; restore or reproduce the
 accepted artifacts according to the frozen contracts.
@@ -669,32 +830,43 @@ Then inspect the actual worktree before editing. Preserve local caches and user
 changes. Do not expose `.env`. Do not replace the approved provider stack unless
 a documented requirement fails.
 
-Do not reimplement Phase 2 or Phase 3: their pipelines, quality layers, frozen
-contracts, accepted artifacts, CLIs, and tests are committed in `eddf33d` and
-the accepted processed artifacts remain local and ignored.
+Do not reimplement Phase 2, Phase 3, Phase 4, or Phase 5. Preserve the frozen
+contracts, accepted artifacts, tested `screen_stocks` and `get_stock_detail`
+behavior, single-entry-point UI boundary, network-independent runtime,
+truthful history/date limitations, and complete explicit exclusions. The
+accepted processed artifacts remain local and ignored.
 
 Immediate assignment:
 
-> Build the minimal Streamlit Stock Screener over the completed
-> `src.screening.screen_stocks` service. Keep all analytical logic in the tested
-> service, show data dates, missing inputs, warnings, and proxy/share-volume
-> labels accurately, and do not bypass the accepted-run loader. Stop before MCP,
-> agent, LLM, comparison, or market-summary work.
+> Begin Phase 6 with the smallest MCP adapter over the completed
+> `screen_stocks` and `get_stock_detail` application services. Use narrow,
+> deterministic project schemas; preserve their accepted-run, validation,
+> error, terminology, and no-recomputation boundaries. Stop before agent, LLM,
+> research brief, comparison, or market-summary work.
 
 Phase 5 sequence:
 
-1. Add the minimal Streamlit dependency and one operational screener page.
-2. Map controls directly to the eight `screen_stocks` inputs.
-3. Render ranked stocks, factor evidence, dates, warnings, and exclusions
-   without reimplementing filtering or scoring in the UI.
-4. Add lightweight UI-boundary tests and rerun the full suite.
-5. Build Stock Detail only after the screener is stable; MCP and the agent/LLM
-   remain later phases.
+1. Complete: minimal Streamlit dependency, telemetry opt-out, and operational
+   screener entry point.
+2. Complete: all eight controls map directly to `screen_stocks`; full evidence,
+   unknown tickers, and exclusions render without analytics in the UI.
+3. Complete: 10 screener UI tests and the original accepted-run/headless
+   smokes.
+4. Complete: dedicated `get_stock_detail` service and Streamlit view over
+   stored accepted evidence, including known ineligible securities.
+5. Complete: 30 detail-service tests, 9 detail AppTests, 84 combined Phase 4/5
+   boundary tests, 214 full tests, and network-blocked `PSKY`/`ECHO` accepted
+   AppTest smoke.
+6. Next: minimal MCP adapters for the two stable application services.
+7. Later: comparison and market/sector summary; the agent/LLM remain later
+   phases.
 
 Suggested prompt for a fresh window:
 
-> Read `PROJECT_CONTEXT_AND_PROGRESS.md` completely, preserve the completed
-> Phase 4 worktree, verify the 165-test result, then build the smallest useful
-> Streamlit Stock Screener by calling `screen_stocks` directly. Keep analytics
-> out of the UI and stop before MCP, agent, LLM, comparison, or market-summary
-> work.
+> Read `PROJECT_CONTEXT_AND_PROGRESS.md` completely, preserve the merged
+> Phase 4 baseline and published stacked Phase 5 branch, verify the 214-test
+> result, then begin
+> Phase 6 with the smallest MCP adapter over `screen_stocks` and
+> `get_stock_detail`. Preserve accepted-run validation, error semantics,
+> proxy/share-volume/Risk terminology, and no-recomputation behavior; stop
+> before comparison, market summary, agent, LLM, or research-brief work.
