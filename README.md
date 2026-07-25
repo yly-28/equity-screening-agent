@@ -9,8 +9,8 @@ Phase 1 data feasibility validation is complete:
 - 503/503 current S&P 500 securities were retrieved from Twelve Data.
 - 499/503, or 99.20%, passed the market usability gate.
 - SEC Company Facts retrieval and core extraction passed for a stratified 88-security, 11-sector sample.
-- The automated suite had 47 passing tests at the Phase 2 freeze and now has
-  130 passing tests after the Phase 3 freeze and acceptance-contract hardening.
+- The automated suite had 47 passing tests at the Phase 2 freeze, 130 after the
+  Phase 3 freeze, and now has 165 after the Phase 4 screening service.
 
 Phase 2 is complete. Data contract `1.0.0` is frozen with status `frozen_v1`. The accepted cache-only run is `2026-07-13_sp500_v1_0_0` for as-of date `2026-07-13`, stored locally under `data/processed/2026-07-13_sp500_v1_0_0/`. It retained all 503 securities, produced 499 eligible rows (99.20%), and excluded `ECHO`, `FDXF`, `HONA`, and `Q`. The run had zero provider errors, zero market network batches, and zero metric-period or stale-non-null violations.
 
@@ -23,8 +23,11 @@ configuration hashes, complete independent quality evidence, metric-sector
 coverage, row counts, and ranking eligibility. The accepted loader re-runs the
 quality gate from the frozen Phase 2 matrix instead of trusting stored summary
 flags alone.
-The active phase is Phase 4, screening and structured explanations. Streamlit,
-MCP, the agent, and LLM-generated briefs remain later work.
+Phase 4 is complete. The deterministic `screen_stocks` service filters and
+ranks only the verified accepted scoring run and returns structured evidence,
+exclusions, and research questions without rescoring a filtered subset.
+The active phase is Phase 5, the minimal product surface. Streamlit, MCP, the
+agent, and LLM-generated briefs have not yet been implemented.
 
 ## Documentation
 
@@ -184,11 +187,48 @@ identity, hash, configuration, quality, provenance, row-count, or ranking-state
 mismatch. The v1 freeze establishes deterministic methodology; it does not
 claim predictive or future-return validation from a single cross-section.
 
+## Phase 4 Screening Service
+
+The public application service is:
+
+```python
+from src.screening import screen_stocks
+
+result = screen_stocks(
+    universe="sp500",
+    custom_tickers=None,
+    mode="balanced",
+    sectors=None,
+    minimum_price=None,
+    minimum_market_cap_proxy=None,
+    minimum_average_volume_20d=None,
+    top_n=20,
+)
+```
+
+It supports `sp500` and custom subsets of tickers already present in the
+accepted snapshot. Unknown custom tickers are returned separately. The service
+applies the selected mode's stored ranking-eligibility flag first, then the
+requested filters, then deterministic sorting by stored mode score descending
+and ticker ascending, and finally `top_n`. It never opens an arbitrary Parquet
+path or recomputes scores, transforms, or weights.
+
+Each returned stock includes identity, sector and industry, the selected mode
+and stored score, all five factor scores, effective factor weights, market and
+fundamental dates, missing inputs, warnings, strengths, risks, reason codes, and
+next research questions. Every known candidate ticker not returned has an
+explicit stage and reason, including mode eligibility, requested filters, or
+`outside_top_n`.
+`average_volume_20d` is labeled as 20-day average share volume, not dollar
+liquidity.
+
 ## Tests
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest
 ```
+
+Latest result: `165 passed`, including 35 focused screening-service tests.
 
 ## Approved Data Boundary
 

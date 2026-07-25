@@ -1,6 +1,6 @@
 # Equity Screening Agent: Context, Progress, and Data Policy
 
-Last updated: 2026-07-20 (Asia/Shanghai)
+Last updated: 2026-07-22 (Asia/Shanghai)
 
 This is the authoritative operational handoff for continuing the repository. It records the live project state, validation evidence, provider decisions, data-quality policy, Git state, and exact next tasks. Stable product requirements are in `PROJECT_SPEC.md`; setup and commands are summarized in `README.md`.
 
@@ -21,7 +21,7 @@ The project passed the pre-model gate:
 | SEC core extraction | 88/88 | Passed |
 | Data contract and quality rules | Contract `1.0.0`, status `frozen_v1` | Passed and frozen |
 | Accepted feature matrix | 503 rows; 499 eligible, or 99.20% | Passed |
-| Automated tests | 47/47 at the Phase 2 freeze; 130/130 after Phase 3 freeze | Passed |
+| Automated tests | 47/47 at Phase 2; 130/130 at Phase 3; 165/165 after Phase 4 | Passed |
 
 **Phase 2, the full feature-matrix pipeline and contract freeze, is complete.** The accepted run is `2026-07-13_sp500_v1_0_0` for as-of date `2026-07-13`, stored locally under `data/processed/2026-07-13_sp500_v1_0_0/`.
 
@@ -31,9 +31,14 @@ complete.** Factor model `1.0.0` and screening modes `1.0.0` have status
 contract `1.0.2`; its scored-matrix SHA-256 is
 `32cb1036fc45f2eb73bbef15e7f4ad920e4585650b33722985565213f8f2ea81`.
 
-The active phase is **Phase 4: screening and structured explanations**.
-Streamlit, MCP, the AI agent, and LLM-generated briefs must still wait until
-the Phase 4 application-service contracts are stable.
+**Phase 4, deterministic screening and structured explanations, is complete.**
+The public `screen_stocks` service reads only the verified accepted scoring run,
+preserves stored scores and weights, returns explicit exclusion evidence, and
+has 35 focused tests.
+
+The active phase is **Phase 5: minimal product surface**. The next implementation
+is a minimal Streamlit Stock Screener over the stable application service.
+MCP, the AI agent, and LLM-generated briefs remain later work.
 
 ## 2. Product Direction Confirmed by Validation
 
@@ -256,10 +261,16 @@ Factor scoring may start only after:
   accepted-input enforcement, ranking-evidence fields, and the Phase 3 CLI.
 - `src/scoring_quality.py`: scoring row accounting, score/weight/arithmetic and
   coverage gates, independent metric/Sector Strength/component/ranking/
-  provenance recomputation, audit tables, and whole-run atomic artifacts.
+  provenance recomputation, full Phase 2 input projection, native numeric-
+  evidence dtype enforcement, audit tables, and whole-run atomic artifacts.
 - `src/scoring_contract.py`: fail-closed loading of the frozen accepted scoring
-  artifact by identity, hashes, configuration, quality, provenance, row counts,
-  and mode-ranking state.
+  artifact by identity, hashes, configuration, independently recomputed quality,
+  native score dtypes, provenance, row counts, and mode-ranking state.
+- `src/screening.py`: deterministic Phase 4 application service for universe
+  resolution, input validation, stored mode eligibility, filters, ranking,
+  explicit exclusions, and JSON-ready evidence projection.
+- `src/explanations.py`: deterministic, non-LLM strengths, risks, reason
+  evidence, and next-research-question helpers over stored factor scores.
 
 ### Validation Modules
 
@@ -282,17 +293,18 @@ Factor scoring may start only after:
 
 ### Tests
 
-One hundred thirty tests cover the Phase 1/2 provider and feature pipeline plus
-the Phase 3 configuration, direct and derived transforms, missing-aware
-aggregation, applicability, ranking-evidence gates, determinism, independent
-quality recomputation, full Phase 2 input-column projection, whole-run
-persistence, acceptance-contract loading and tamper rejection, and a fully
-local scoring CLI integration run.
+One hundred sixty-five tests cover the Phase 1/2 provider and feature pipeline,
+the Phase 3 scoring and acceptance contracts, and the Phase 4 screening
+service. The 35 screening tests cover normal ranking, all numeric and sector
+filters, Value ranking eligibility, deterministic ties, missing filter values,
+custom ticker normalization, unknown tickers, clear invalid-input errors,
+eligibility-before-filter ordering, stored-score preservation, row-order
+invariance, explicit top-N exclusions, and network/direct-Parquet independence.
 
 Latest result:
 
 ```text
-130 passed
+165 passed
 ```
 
 ## 7. Machine-Readable Evidence
@@ -322,18 +334,31 @@ Repository: `equity-screening-agent`
 
 Branch: `main`
 
-Historical baseline revision at the start of the Phase 2/3 work:
+GitHub remote: `https://github.com/yly-28/equity-screening-agent.git`
+
+Published Phase 2/3 baseline:
 
 ```text
-4cc0e4f chore: finalize data validation handoff
+eddf33d feat: complete phase 2 and phase 3 pipelines
 ```
 
-Do not infer the current commit or staging state from this handoff: inspect
-`git status` and `git log` before editing or publishing. Preserve all Phase 2/3
-worktree changes and never reset or discard them casually. Existing Git hygiene
-remains mandatory: `.env`, raw provider payloads, local caches, processed
-matrices, and security-level provider exports must remain untracked unless an
-explicit redistribution and version-control decision is made.
+Commit `eddf33d` was pushed to `origin/main` on 2026-07-22. It contains the
+complete Phase 2 feature pipeline, Phase 3 scoring and quality layers, frozen
+contracts, documentation, and the 130-test suite. The accepted Phase 2 and
+Phase 3 processed runs are intentionally ignored local artifacts and are not in
+Git.
+
+The Phase 4 publication branch `agent/complete-phase-4-screening` adds the
+completed screening service, deterministic explanation helpers, and 35 focused
+tests, bringing the suite to 165 passing tests. It is published through a draft
+pull request and is not part of `main` until that pull request is merged.
+
+Every new session must still run `git status -sb` and `git log -1 --oneline`
+before editing because this handoff file itself or later work may be newer than
+the published baseline. Never reset or discard local work casually. `.env`, raw
+provider payloads, local caches, processed matrices, and security-level provider
+exports must remain untracked unless an explicit redistribution and version-
+control decision is made.
 
 ## 9. Completed Phase 3 Scoring Kernel
 
@@ -457,10 +482,27 @@ for Value ranking. `MRNA`'s audit-only raw margin does not enter scoring.
 - This is a one-snapshot method-contract validation, not a backtest or evidence
   of future-return prediction. A new methodology requires a new version rather
   than mutating frozen v1.
-- Custom-target scoring against the accepted reference is supported by the
-  kernel, but a public custom-universe workflow is not yet validated.
-- Screening services, explanations, UI, MCP, agent, and report generation are
-  not implemented.
+- The public custom-universe workflow is intentionally limited to ticker
+  subsets already present in the accepted S&P 500 snapshot. Unknown tickers are
+  reported separately; the service does not fetch or score new securities.
+- Screening is bound to the fixed accepted as-of date and has no arbitrary
+  as-of or run-path input. The local accepted Phase 2 and Phase 3 artifacts must
+  exist and pass verification or the service fails closed.
+- An active numeric filter excludes a row whose corresponding value is missing;
+  it never treats missing as zero. In particular, market-cap-proxy gaps can
+  reduce a filtered result set.
+- Every known candidate ticker not returned carries an explicit exclusion
+  record, including `outside_top_n`. This is audit-friendly but can make
+  full-universe response payloads large; UI/MCP adapters may later need summary
+  or pagination.
+- The accepted loader independently revalidates the full frozen scoring bundle
+  on each service call. This preserves the fail-closed boundary but has no
+  cross-call performance cache yet.
+- Structured strengths, risks, and research questions are deterministic rules
+  over stored evidence. High/low factor evidence currently uses fixed 70/30
+  score thresholds; it is not causal analysis or LLM-authored investment advice.
+- The screening service is implemented; UI, MCP, agent, comparison, stock
+  detail, market summaries, and report generation are not yet implemented.
 
 ## 10. Remaining Roadmap
 
@@ -474,11 +516,49 @@ for Value ranking. `MRNA`'s audit-only raw margin does not enter scoring.
 5. Completed: quantitative distribution/preference review, model revision,
    frozen v1 configs, accepted scoring contract, and byte-exact determinism.
 
-### Phase 4: Screening and Explanations (Active)
+### Phase 4: Screening and Explanations (Complete)
 
-1. Implement `screen_stocks` with universe, mode, sector, liquidity, and top-N filters.
-2. Produce structured strengths, risks, warnings, and next research questions.
-3. Add stock-detail, comparison, market-overview, and sector-summary services.
+Phase 4 delivered the tested `screen_stocks` application service in
+`src/screening.py` and isolated deterministic explanation helpers in
+`src/explanations.py`. Its public inputs are:
+
+```text
+universe
+custom_tickers
+mode
+sectors
+minimum_price
+minimum_market_cap_proxy
+minimum_average_volume_20d
+top_n
+```
+
+The completed service:
+
+1. loads only through `src.scoring_contract.load_accepted_scoring_run` and has
+   no arbitrary run-directory or Parquet input;
+2. applies stored mode-ranking eligibility first, requested filters second,
+   stored mode-score/ticker ordering third, and `top_n` last;
+3. never recomputes transforms, factor scores, mode scores, or effective
+   weights on a filtered subset;
+4. normalizes custom tickers, reports unknown tickers separately, and validates
+   universes, modes, sectors, thresholds, and `top_n` clearly;
+5. excludes missing active numeric-filter fields instead of treating them as
+   zero;
+6. returns rank, identity, sector/industry, five factor scores, effective
+   weights, data dates and sources, missing inputs, warnings, strengths, risks,
+   reason codes, and next research questions;
+7. records explicit per-candidate-ticker reasons for mode ineligibility,
+   requested-filter failures, and `outside_top_n`;
+8. labels `average_volume_20d` as 20-day average share volume rather than dollar
+   liquidity; and
+9. is JSON-serializable, row-order invariant, and network-independent outside
+   the accepted loader boundary.
+
+Accepted-run review reproduced Balanced leaders `ALL`, `KLAC`, and `PGR`, and
+Value leaders `ACGL`, `ALL`, and `MO`. A stored Value tie was resolved
+deterministically as `D` rank 84 and `ES` rank 85. Thirty-five focused tests and
+the full 165-test suite pass.
 
 ### Phase 5: Minimal Product Surface
 
@@ -561,35 +641,60 @@ Do not add `--refresh` casually. Confirm credits, expected runtime, and the need
 
 Read in order:
 
-1. `README.md`;
-2. `PROJECT_SPEC.md`;
-3. this file;
+1. this file;
+2. `README.md`;
+3. `PROJECT_SPEC.md`;
 4. `config/data_contract.yaml`;
-5. relevant source modules and tests.
+5. `config/factor_model.yaml`, `config/screening_modes.yaml`, and
+   `config/scoring_contract.yaml`;
+6. `src/scoring_contract.py`, `src/screening.py`, `src/explanations.py`, and
+   relevant tests.
 
-Then inspect the actual worktree before editing. Preserve local caches and user changes. Do not expose `.env`. Do not replace the approved provider stack unless a documented requirement fails.
+Start with these checks:
+
+```bash
+git status -sb
+git log -1 --oneline
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q
+```
+
+The published baseline remains commit `eddf33d` on `main` with 130 Phase 1-3
+tests. The current Phase 4 worktree should report `165 passed`. On this machine,
+the accepted local run should be
+`data/processed/2026-07-13_sp500_scores_v1_0_2/`. If it is absent, do not weaken
+the loader or point it at an arbitrary candidate; restore or reproduce the
+accepted artifacts according to the frozen contracts.
+
+Then inspect the actual worktree before editing. Preserve local caches and user
+changes. Do not expose `.env`. Do not replace the approved provider stack unless
+a documented requirement fails.
 
 Do not reimplement Phase 2 or Phase 3: their pipelines, quality layers, frozen
-contracts, accepted artifacts, CLIs, and tests already exist in the current
-uncommitted worktree.
+contracts, accepted artifacts, CLIs, and tests are committed in `eddf33d` and
+the accepted processed artifacts remain local and ignored.
 
 Immediate assignment:
 
-> Begin Phase 4 from the verified artifact returned by
-> `src.scoring_contract.load_accepted_scoring_run`. Implement a deterministic
-> `screen_stocks` application service with universe/mode/sector/liquidity/top-N
-> filters, enforce each mode's ranking-eligibility flag, and return structured
-> strengths, risks, missing inputs, warnings, factor breakdown, and reason
-> codes. Do not read arbitrary scored Parquet files directly.
+> Build the minimal Streamlit Stock Screener over the completed
+> `src.screening.screen_stocks` service. Keep all analytical logic in the tested
+> service, show data dates, missing inputs, warnings, and proxy/share-volume
+> labels accurately, and do not bypass the accepted-run loader. Stop before MCP,
+> agent, LLM, comparison, or market-summary work.
 
-Phase 4 sequence:
+Phase 5 sequence:
 
-1. Define request/response schemas and deterministic tie-breaking.
-2. Implement mode-specific ranking eligibility, filters, and top-N selection.
-3. Implement structured evidence and explanation reason codes without an LLM.
-4. Add stock-detail, comparison, market-overview, and sector-summary services.
-5. Keep UI, MCP, Agent, and LLM work in their planned order.
+1. Add the minimal Streamlit dependency and one operational screener page.
+2. Map controls directly to the eight `screen_stocks` inputs.
+3. Render ranked stocks, factor evidence, dates, warnings, and exclusions
+   without reimplementing filtering or scoring in the UI.
+4. Add lightweight UI-boundary tests and rerun the full suite.
+5. Build Stock Detail only after the screener is stable; MCP and the agent/LLM
+   remain later phases.
 
-Use subagents only for independent, bounded parallel work such as service-
-contract review, ranking edge-case analysis, or test-gap auditing. Keep Phase 4
-integration and final verification in the main thread.
+Suggested prompt for a fresh window:
+
+> Read `PROJECT_CONTEXT_AND_PROGRESS.md` completely, preserve the completed
+> Phase 4 worktree, verify the 165-test result, then build the smallest useful
+> Streamlit Stock Screener by calling `screen_stocks` directly. Keep analytics
+> out of the UI and stop before MCP, agent, LLM, comparison, or market-summary
+> work.
