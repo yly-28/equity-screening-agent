@@ -326,6 +326,41 @@ def test_all_numeric_filters(
     assert expected_reason in _exclusion(result, reason_ticker)["reasons"]
 
 
+def test_factor_score_filters_use_stored_scores_without_reranking(monkeypatch) -> None:
+    _install_loader(monkeypatch, _screening_frame())
+
+    result = screen_stocks(
+        minimum_factor_scores={"quality": 72.0, "risk": 29.0},
+        top_n=20,
+    )
+
+    assert result["filters"]["minimum_factor_scores"] == {
+        "quality": 72.0,
+        "risk": 29.0,
+    }
+    assert [stock["ticker"] for stock in result["stocks"]] == ["AAA", "BBB"]
+    assert _exclusion(result, "CCC")["reasons"] == [
+        "below_minimum:risk_score"
+    ]
+
+
+def test_missing_active_factor_score_is_explicitly_excluded(monkeypatch) -> None:
+    frame = _screening_frame()
+    index = frame.index[frame["ticker"].eq("AAA")][0]
+    frame.at[index, "quality_score"] = np.nan
+    _install_loader(monkeypatch, frame)
+
+    result = screen_stocks(
+        minimum_factor_scores={"quality": 0.0},
+        top_n=20,
+    )
+
+    assert "AAA" not in [stock["ticker"] for stock in result["stocks"]]
+    assert _exclusion(result, "AAA")["reasons"] == [
+        "missing_filter_value:quality_score"
+    ]
+
+
 def test_sector_filtering_is_case_insensitive_and_canonical(monkeypatch) -> None:
     _install_loader(monkeypatch, _screening_frame())
 
@@ -466,6 +501,19 @@ def test_unknown_custom_tickers_are_reported_separately(monkeypatch) -> None:
         (
             {"minimum_average_volume_20d": -1.0},
             "minimum_average_volume_20d",
+        ),
+        ({"minimum_factor_scores": []}, "minimum_factor_scores"),
+        (
+            {"minimum_factor_scores": {"unknown": 50.0}},
+            "Unknown factor-score filters",
+        ),
+        (
+            {"minimum_factor_scores": {"quality": 101.0}},
+            "minimum_factor_scores.quality",
+        ),
+        (
+            {"minimum_factor_scores": {"quality": float("nan")}},
+            "minimum_factor_scores.quality",
         ),
         ({"top_n": 0}, "top_n"),
         ({"top_n": True}, "top_n"),

@@ -78,6 +78,47 @@ def _normalize_top_n(value: object) -> int:
     return int(value)
 
 
+def _normalize_factor_thresholds(value: object) -> dict[str, float]:
+    """Validate optional 0-100 minimums for the five stored factor scores."""
+
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ScreeningValidationError(
+            "minimum_factor_scores must be a mapping of factor names to scores"
+        )
+
+    supported = {factor_name for factor_name, _ in FACTOR_FIELDS}
+    unknown = sorted(
+        str(factor_name) for factor_name in value if factor_name not in supported
+    )
+    if unknown:
+        raise ScreeningValidationError(
+            "Unknown factor-score filters: "
+            + ", ".join(unknown)
+            + ". Supported factors: "
+            + ", ".join(sorted(supported))
+        )
+
+    normalized: dict[str, float] = {}
+    for factor_name, minimum in value.items():
+        threshold = _normalize_threshold(
+            minimum, f"minimum_factor_scores.{factor_name}"
+        )
+        if threshold is None:
+            continue
+        if threshold > 100.0:
+            raise ScreeningValidationError(
+                f"minimum_factor_scores.{factor_name} must be between 0 and 100"
+            )
+        normalized[str(factor_name)] = threshold
+    return {
+        factor_name: normalized[factor_name]
+        for factor_name, _ in FACTOR_FIELDS
+        if factor_name in normalized
+    }
+
+
 def _normalize_custom_tickers(value: object) -> tuple[str, ...]:
     if value is None:
         return ()
@@ -257,6 +298,7 @@ def _filter_reasons(
     minimum_price: Optional[float],
     minimum_market_cap_proxy: Optional[float],
     minimum_average_volume_20d: Optional[float],
+    minimum_factor_scores: Mapping[str, float],
 ) -> list[str]:
     reasons: list[str] = []
     if selected_sectors and str(row["sector"]) not in selected_sectors:
@@ -270,6 +312,13 @@ def _filter_reasons(
     for field_name, minimum in numeric_filters:
         if minimum is None:
             continue
+        value = _number_or_none(row[field_name])
+        if value is None:
+            reasons.append(f"missing_filter_value:{field_name}")
+        elif value < minimum:
+            reasons.append(f"below_minimum:{field_name}")
+    for factor_name, minimum in minimum_factor_scores.items():
+        field_name = f"{factor_name}_score"
         value = _number_or_none(row[field_name])
         if value is None:
             reasons.append(f"missing_filter_value:{field_name}")
@@ -394,6 +443,7 @@ def screen_stocks(
     minimum_price: Optional[float] = None,
     minimum_market_cap_proxy: Optional[float] = None,
     minimum_average_volume_20d: Optional[float] = None,
+    minimum_factor_scores: Optional[Mapping[str, float]] = None,
     top_n: int = 20,
 ) -> dict[str, object]:
     """Filter and rank the frozen accepted scoring artifact.
@@ -418,6 +468,9 @@ def screen_stocks(
     )
     normalized_minimum_volume = _normalize_threshold(
         minimum_average_volume_20d, "minimum_average_volume_20d"
+    )
+    normalized_factor_thresholds = _normalize_factor_thresholds(
+        minimum_factor_scores
     )
     normalized_top_n = _normalize_top_n(top_n)
 
@@ -488,6 +541,7 @@ def screen_stocks(
             normalized_minimum_price,
             normalized_minimum_market_cap,
             normalized_minimum_volume,
+            normalized_factor_thresholds,
         )
         if reasons:
             filter_excluded_count += 1
@@ -526,6 +580,7 @@ def screen_stocks(
         or normalized_minimum_price is not None
         or normalized_minimum_market_cap is not None
         or normalized_minimum_volume is not None
+        or normalized_factor_thresholds
     )
     stocks = [
         _stock_record(row, normalized_mode, rank, filters_active)
@@ -560,6 +615,7 @@ def screen_stocks(
             "minimum_price": normalized_minimum_price,
             "minimum_market_cap_proxy": normalized_minimum_market_cap,
             "minimum_average_volume_20d": normalized_minimum_volume,
+            "minimum_factor_scores": normalized_factor_thresholds,
             "top_n": normalized_top_n,
         },
         "field_labels": {
