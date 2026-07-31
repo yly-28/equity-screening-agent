@@ -1,11 +1,10 @@
-"""Minimal Streamlit Stock Screener over the Phase 4 application service."""
+"""Streamlit research workspace over the project's tested service boundaries."""
 
 from __future__ import annotations
 
 import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any
 
 import streamlit as st
 
@@ -14,7 +13,14 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src import scoring_contract, screening, stock_detail
+from src import (
+    ai_report,
+    comparison,
+    live_analysis,
+    overview,
+    scoring_contract,
+    screening,
+)
 
 
 MODE_LABELS = {
@@ -25,12 +31,10 @@ MODE_LABELS = {
 }
 
 UNIVERSE_LABELS = {
-    "sp500": "Current S&P 500 snapshot",
-    "custom": "Custom ticker subset",
+    "sp500": "Accepted S&P 500 snapshot",
+    "custom": "Custom accepted-run tickers",
 }
 
-# The accepted snapshot uses the 11 canonical GICS sector names. The service
-# remains the authority that validates every submitted value.
 SECTOR_OPTIONS = (
     "Communication Services",
     "Consumer Discretionary",
@@ -53,20 +57,6 @@ FACTOR_LABELS = {
     "sector_strength": "Sector Strength",
 }
 
-DATE_LABELS = {
-    "as_of_date": "Screening as-of date",
-    "price_data_end": "Market price date",
-    "fundamental_period_end": "Latest fundamental period end",
-    "fundamental_filed_date": "Latest fundamental filing date",
-    "annual_revenue_period_end": "Annual revenue period end",
-    "annual_net_income_period_end": "Annual net income period end",
-    "profit_margin_period_end": "Profit margin period end",
-    "roe_period_end": "ROE period end",
-    "leverage_period_end": "Liabilities-to-equity period end",
-    "free_cash_flow_period_end": "Free-cash-flow period end",
-    "shares_outstanding_period_end": "Shares-outstanding period end",
-}
-
 DISCLAIMER = (
     "This output is generated for educational and research purposes only. "
     "It is not financial advice, investment advice, or a recommendation to "
@@ -84,15 +74,15 @@ def build_screening_request(
     minimum_market_cap_proxy: float | None,
     minimum_average_volume_20d: float | None,
     top_n: int,
+    minimum_factor_scores: Mapping[str, float] | None = None,
 ) -> dict[str, object]:
-    """Map the eight UI controls directly to ``screen_stocks`` arguments."""
+    """Map UI controls directly to ``screen_stocks`` arguments."""
 
-    custom_tickers = (
-        custom_ticker_text.splitlines() if universe == "custom" else None
-    )
-    return {
+    request: dict[str, object] = {
         "universe": universe,
-        "custom_tickers": custom_tickers,
+        "custom_tickers": (
+            custom_ticker_text.splitlines() if universe == "custom" else None
+        ),
         "mode": mode,
         "sectors": list(sectors) if sectors else None,
         "minimum_price": minimum_price,
@@ -100,40 +90,55 @@ def build_screening_request(
         "minimum_average_volume_20d": minimum_average_volume_20d,
         "top_n": top_n,
     }
+    if minimum_factor_scores:
+        request["minimum_factor_scores"] = dict(minimum_factor_scores)
+    return request
 
 
 def execute_screening(request: Mapping[str, object]) -> dict[str, object]:
-    """Call the Phase 4 service without adding analytical behavior."""
+    """Call the deterministic screening service unchanged."""
 
     return screening.screen_stocks(**request)
 
 
-def build_stock_detail_request(
+def build_analysis_request(
     *,
     ticker: str,
     mode: str,
+    refresh: bool,
 ) -> dict[str, object]:
-    """Map the Stock Detail controls directly to the dedicated service."""
+    """Map the ticker form directly to the unified analysis service."""
 
-    return {"ticker": ticker, "mode": mode}
+    return {"ticker": ticker, "mode": mode, "refresh": refresh}
 
 
-def execute_stock_detail(
-    request: Mapping[str, object],
-) -> dict[str, object]:
-    """Call the Stock Detail service without adding analytical behavior."""
+def execute_analysis(request: Mapping[str, object]) -> dict[str, object]:
+    """Call the unified ticker analysis service unchanged."""
 
-    return stock_detail.get_stock_detail(**request)
+    return live_analysis.analyze_ticker(**request)
+
+
+def execute_comparison(request: Mapping[str, object]) -> dict[str, object]:
+    """Call the requested-order comparison service unchanged."""
+
+    return comparison.compare_stocks(**request)
+
+
+def execute_overview(request: Mapping[str, object]) -> dict[str, object]:
+    """Call the accepted-run market overview service unchanged."""
+
+    return overview.get_market_overview(**request)
 
 
 def ranked_company_rows(result: Mapping[str, object]) -> list[dict[str, object]]:
-    """Project ranked service records for display without filtering or sorting."""
+    """Project ranked service records without filtering or sorting them."""
 
     rows: list[dict[str, object]] = []
-    for stock_value in result["stocks"]:  # type: ignore[index]
-        stock = stock_value  # type: ignore[assignment]
+    for stock in result["stocks"]:  # type: ignore[index]
         factor_scores = stock["factor_scores"]
         data_dates = stock["data_dates"]
+        strengths = stock["strengths"]
+        risks = stock["risks"]
         rows.append(
             {
                 "Rank": stock["rank"],
@@ -151,29 +156,88 @@ def ranked_company_rows(result: Mapping[str, object]) -> list[dict[str, object]]
                 "Market-cap proxy (USD)": stock["market_cap_proxy"],
                 "20-day average share volume": stock["average_volume_20d"],
                 "Market data date": data_dates["price_data_end"],
-                "Fundamental period end": data_dates[
-                    "fundamental_period_end"
-                ],
+                "Fundamental period end": data_dates["fundamental_period_end"],
                 "Filing date": data_dates["fundamental_filed_date"],
+                "Top strength": strengths[0]["summary"] if strengths else None,
+                "Top risk": risks[0]["summary"] if risks else None,
+                "Warnings": ", ".join(stock["warnings"]),
             }
         )
     return rows
 
 
 def exclusion_rows(result: Mapping[str, object]) -> list[dict[str, object]]:
-    """Project explicit service exclusions in their existing order."""
+    """Project service exclusions in their existing order."""
+
+    return [
+        {
+            "Ticker": item["ticker"],
+            "Company": item["company_name"],
+            "Sector": item["sector"],
+            "Selected mode score": item["mode_score"],
+            "Stage": item["stage"],
+            "Exclusion reasons": ", ".join(item["reasons"]),
+        }
+        for item in result["exclusions"]  # type: ignore[index]
+    ]
+
+
+def comparison_rows(result: Mapping[str, object]) -> list[dict[str, object]]:
+    """Project comparison items in requested order without reranking."""
 
     rows: list[dict[str, object]] = []
-    for exclusion_value in result["exclusions"]:  # type: ignore[index]
-        exclusion = exclusion_value  # type: ignore[assignment]
+    for item in result["items"]:  # type: ignore[index]
+        if item["status"] != "available":
+            rows.append(
+                {
+                    "Position": item["request_position"],
+                    "Ticker": item["ticker"],
+                    "Status": "Unknown",
+                    "Company": None,
+                    "Selected mode score": None,
+                    "Ranking eligible": None,
+                    "Momentum": None,
+                    "Quality": None,
+                    "Valuation": None,
+                    "Risk (higher = lower measured risk)": None,
+                    "Sector Strength": None,
+                    "Price (USD)": None,
+                    "Market data date": None,
+                    "Fundamental filing date": None,
+                    "Note": item["reason_code"],
+                }
+            )
+            continue
+        identity = item["identity"]
+        selected_mode = item["selected_mode"]
+        factors = item["factor_scores"]
+        snapshot = item["market_snapshot"]
+        data_dates = item["data_dates"]
+        strengths = item["strengths"]
+        risks = item["risks"]
         rows.append(
             {
-                "Ticker": exclusion["ticker"],
-                "Company": exclusion["company_name"],
-                "Sector": exclusion["sector"],
-                "Selected mode score": exclusion["mode_score"],
-                "Stage": exclusion["stage"],
-                "Exclusion reasons": ", ".join(exclusion["reasons"]),
+                "Position": item["request_position"],
+                "Ticker": item["ticker"],
+                "Status": "Available",
+                "Company": identity["company_name"],
+                "Selected mode score": selected_mode["score"],
+                "Ranking eligible": selected_mode["eligible_for_ranking"],
+                "Momentum": factors["momentum"],
+                "Quality": factors["quality"],
+                "Valuation": factors["valuation"],
+                "Risk (higher = lower measured risk)": factors["risk"],
+                "Sector Strength": factors["sector_strength"],
+                "Price (USD)": snapshot["price"],
+                "Market data date": data_dates["price_data_end"],
+                "Fundamental filing date": data_dates[
+                    "fundamental_filed_date"
+                ],
+                "Note": (
+                    strengths[0]["summary"]
+                    if strengths
+                    else (risks[0]["summary"] if risks else None)
+                ),
             }
         )
     return rows
@@ -187,66 +251,17 @@ def _format_number(
 ) -> str:
     if value is None:
         return "Unavailable"
-    numeric = float(value)
     prefix = "$" if currency else ""
-    return f"{prefix}{numeric:,.2f}{suffix}"
+    return f"{prefix}{float(value):,.2f}{suffix}"
 
 
-def _format_mode(mode: object) -> str:
+def _mode_label(mode: object) -> str:
     return MODE_LABELS.get(str(mode), str(mode))
 
 
-def _format_active_filters(result: Mapping[str, object]) -> str:
-    filters = result["filters"]  # type: ignore[index]
-    sectors = filters["sectors"]
-    sector_text = ", ".join(sectors) if sectors else "All sectors"
-    minimum_price = filters["minimum_price"]
-    minimum_market_cap = filters["minimum_market_cap_proxy"]
-    minimum_volume = filters["minimum_average_volume_20d"]
-    return "\n".join(
-        (
-            f"- **Sectors:** {sector_text}",
-            "- **Minimum price:** "
-            + (
-                _format_number(minimum_price, currency=True)
-                if minimum_price is not None
-                else "None"
-            ),
-            "- **Minimum market-cap proxy:** "
-            + (
-                _format_number(minimum_market_cap, currency=True)
-                if minimum_market_cap is not None
-                else "None"
-            ),
-            "- **Minimum 20-day average share volume:** "
-            + (
-                _format_number(minimum_volume, suffix=" shares")
-                if minimum_volume is not None
-                else "None"
-            ),
-            f"- **Top N:** {filters['top_n']}",
-        )
-    )
-
-
-def _render_snapshot_and_request(result: Mapping[str, object]) -> None:
-    st.subheader("Accepted snapshot and request")
-    run_column, date_column, mode_column, universe_column = st.columns(4)
-    run_column.metric("Accepted run ID", result["accepted_run_id"])
-    date_column.metric("As-of date", result["as_of_date"])
-    mode_column.metric("Selected mode", _format_mode(result["mode"]))
-    universe_column.metric(
-        "Universe",
-        UNIVERSE_LABELS.get(str(result["universe"]), str(result["universe"])),
-    )
-    st.caption(
-        "Scoring contract "
-        f"{result['scoring_contract_version']} · Factor model "
-        f"{result['factor_model_version']} · Screening modes "
-        f"{result['screening_modes_version']}"
-    )
-    st.markdown("**Active filters**")
-    st.markdown(_format_active_filters(result))
+def _render_disclaimer() -> None:
+    st.divider()
+    st.caption(DISCLAIMER)
 
 
 def _render_evidence_items(
@@ -259,590 +274,258 @@ def _render_evidence_items(
         return
     for item in items:
         score = item.get("score")
-        score_text = "" if score is None else f" Score: {float(score):.2f}."
-        st.markdown(
-            f"- {item['summary']}{score_text} Code: `{item['code']}`"
+        score_text = "" if score is None else f" ({float(score):.2f})"
+        st.markdown(f"- {item['summary']}{score_text}")
+
+
+def render_analysis_result(
+    result: Mapping[str, object],
+    rendered_ai: Mapping[str, object] | None = None,
+) -> None:
+    """Render the narrow unified analysis schema without adding conclusions."""
+
+    identity = result["identity"]  # type: ignore[index]
+    scoring = result["scoring"]  # type: ignore[index]
+    report = result["report"]  # type: ignore[index]
+    posture = report["research_posture"]
+    company_name = identity.get("company_name") or result["ticker"]
+    st.subheader(f"{result['ticker']} — {company_name}")
+    classification = (
+        f"{identity.get('sector') or 'Sector unavailable'} · "
+        f"{identity.get('industry') or 'Industry unavailable'}"
+    )
+    st.caption(classification)
+
+    columns = st.columns(4)
+    columns[0].metric("Evidence scope", result["data_scope"])
+    columns[1].metric("Mode", _mode_label(result["mode"]))
+    columns[2].metric(
+        "Selected mode score",
+        _format_number(scoring["selected_mode_score"]),
+    )
+    columns[3].metric(
+        "Ranking eligibility",
+        "Eligible" if scoring["eligible_for_ranking"] else "Not eligible",
+    )
+
+    quote = result.get("live_quote")
+    if quote:
+        quote_columns = st.columns(4)
+        quote_columns[0].metric(
+            "Latest provider price",
+            _format_number(quote.get("price"), currency=True),
+        )
+        quote_columns[1].metric("Change", _format_number(quote.get("change")))
+        quote_columns[2].metric(
+            "Percent change",
+            _format_number(quote.get("percent_change"), suffix="%"),
+        )
+        quote_columns[3].metric(
+            "Quote time",
+            quote.get("provider_datetime") or quote.get("fetched_at_utc"),
+        )
+        st.caption(
+            "The refreshed quote is display-only and is never used to change "
+            "factor scores, eligibility, or ranking."
         )
 
-
-def _render_stock_detail(stock: Mapping[str, Any]) -> None:
-    ticker = stock["ticker"]
-    st.markdown(
-        f"**{stock['company_name']}** · {stock['sector']} · "
-        f"{stock['industry']} · CIK {stock['cik']}"
-    )
-    score_column, price_column, cap_column, volume_column = st.columns(4)
-    score_column.metric(
-        f"{_format_mode(stock['screening_mode'])} score",
-        f"{float(stock['mode_score']):.2f}",
-    )
-    price_column.metric(
-        "Latest adjusted daily price",
-        _format_number(stock["price"], currency=True),
-    )
-    cap_column.metric(
-        "Market-cap proxy",
-        _format_number(stock["market_cap_proxy"], currency=True),
-    )
-    volume_column.metric(
-        "20-day average share volume",
-        _format_number(stock["average_volume_20d"], suffix=" shares"),
-    )
-    st.caption(
-        "Market-cap proxy is price times validated shares outstanding; it is "
-        "not authoritative market capitalization. Volume is measured in "
-        "shares. A higher Risk score means lower measured risk."
-    )
-
-    factor_scores = stock["factor_scores"]
-    st.markdown("**Factor scores**")
-    st.dataframe(
-        [
-            {"Factor": FACTOR_LABELS[factor_name], "Score": factor_scores[factor_name]}
-            for factor_name in FACTOR_LABELS
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-
-    st.markdown("**Effective factor weights**")
-    st.dataframe(
-        [
-            {
-                "Factor": FACTOR_LABELS.get(factor_name, factor_name),
-                "Effective factor weight": f"{float(weight):.2%}",
-            }
-            for factor_name, weight in stock[
-                "effective_factor_weights"
-            ].items()
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-    available_factors = stock["available_factors"]
-    st.caption(
-        "Available factors: "
-        + (
-            ", ".join(
-                FACTOR_LABELS.get(factor_name, factor_name)
-                for factor_name in available_factors
+    if result["data_scope"] == "live_unscored":
+        st.warning(
+            "This ticker is outside the accepted scoring run. Identity and "
+            "provider evidence may be shown, but factor scores and rank remain "
+            "unavailable without trusted project GICS classification."
+        )
+        profile = result.get("provider_profile")
+        if profile:
+            st.caption(
+                "Provider taxonomy (not project GICS): "
+                f"{profile.get('provider_sector') or 'Unavailable'} · "
+                f"{profile.get('provider_industry') or 'Unavailable'}"
             )
-            if available_factors
-            else "None"
-        )
-    )
 
-    source_market = stock["data_sources"].get("market") or "Unavailable"
-    source_fundamentals = (
-        stock["data_sources"].get("fundamentals") or "Unavailable"
-    )
-    st.markdown(
-        f"**Sources:** market `{source_market}` · fundamentals "
-        f"`{source_fundamentals}`"
-    )
+    if rendered_ai is None:
+        st.markdown(f"### {posture['label']} research fit")
+        st.write(report["summary"])
+    else:
+        renderer = rendered_ai["renderer"]  # type: ignore[index]
+        st.markdown("### AI-arranged concise report")
+        st.markdown(f"**{rendered_ai['headline']}**")
+        st.write(rendered_ai["analysis"])
+        if renderer["status"] == "deterministic_fallback":
+            st.info(
+                "AI rendering was not used; deterministic evidence order was "
+                f"returned ({renderer['fallback_reason']})."
+            )
+        else:
+            st.caption(
+                f"OpenAI model {renderer['model']} selected only the order of "
+                "existing evidence sentences; it could not add facts or advice."
+            )
+    st.caption(posture["meaning"])
+
+    factor_scores = report["factor_scores"]
     st.dataframe(
         [
-            {
-                "Relevant date": DATE_LABELS.get(field_name, field_name),
-                "Value": value if value is not None else "Unavailable",
-            }
-            for field_name, value in stock["data_dates"].items()
+            {"Factor": label, "Score": factor_scores.get(name)}
+            for name, label in FACTOR_LABELS.items()
         ],
         hide_index=True,
         width="stretch",
     )
-
-    missing_inputs = stock["missing_inputs"]
-    if missing_inputs:
-        st.info(f"{ticker} missing inputs: " + ", ".join(missing_inputs))
-    else:
-        st.caption("Missing inputs: none reported.")
-
-    warnings = stock["warnings"]
-    if warnings:
-        st.warning(f"{ticker} warnings: " + "; ".join(warnings))
-    else:
-        st.caption("Warnings: none reported.")
+    st.caption(
+        "A higher Risk score means lower measured risk. Null means the accepted "
+        "evidence is unavailable; the UI does not impute it."
+    )
 
     strength_column, risk_column = st.columns(2)
     with strength_column:
-        _render_evidence_items("Strengths", stock["strengths"])
+        _render_evidence_items("Strengths", report["strengths"])
     with risk_column:
-        _render_evidence_items("Risks", stock["risks"])
+        _render_evidence_items("Risks / limitations", report["risks"])
 
-    st.markdown("**Reason codes**")
-    st.markdown(
-        ", ".join(f"`{code}`" for code in stock["reason_codes"])
-        or "None reported."
-    )
-    st.markdown("**Next research questions**")
-    for question in stock["next_research_questions"]:
-        st.markdown(f"- {question}")
+    warnings = list(result.get("warnings", []))
+    if warnings:
+        st.warning("Warnings: " + "; ".join(str(item) for item in warnings))
+    provider_errors = result.get("provider_errors", {})
+    if provider_errors:
+        for name, message in provider_errors.items():
+            st.warning(f"{name}: {message}")
 
-
-def _render_ranked_companies(result: Mapping[str, object]) -> None:
-    st.subheader("Ranked companies")
-    count_columns = st.columns(4)
-    count_columns[0].metric("Candidates", result["candidate_count"])
-    count_columns[1].metric(
-        "Ranking eligible", result["ranking_eligible_count"]
-    )
-    count_columns[2].metric("Returned", result["returned_count"])
-    count_columns[3].metric("Excluded", result["excluded_count"])
-
-    stocks = result["stocks"]  # type: ignore[index]
-    if not stocks:
-        st.info(
-            "No ranked companies matched the selected mode and requested "
-            "filters. Review the explicit exclusions below."
-        )
-        return
-
-    st.dataframe(
-        ranked_company_rows(result),
-        hide_index=True,
-        width="stretch",
-    )
-    st.caption(
-        "Rows remain in the deterministic order returned by screen_stocks. "
-        "The UI does not rescore or rerank them."
-    )
-    for stock in stocks:
-        with st.expander(
-            f"#{stock['rank']} {stock['ticker']} — {stock['company_name']}"
-        ):
-            _render_stock_detail(stock)
-
-
-def _render_unknown_tickers(result: Mapping[str, object]) -> None:
-    unknown_tickers = result["unknown_tickers"]  # type: ignore[index]
-    if not unknown_tickers:
-        return
-    st.subheader("Unknown custom tickers")
-    st.warning(
-        "These custom tickers are not present in the accepted local S&P 500 "
-        "snapshot and were not fetched or scored: "
-        + ", ".join(unknown_tickers)
-    )
-    st.dataframe(
-        [{"Unknown custom ticker": ticker} for ticker in unknown_tickers],
-        hide_index=True,
-        width="stretch",
-    )
-
-
-def _render_exclusions(result: Mapping[str, object]) -> None:
-    st.subheader("Explicit exclusions")
-    st.caption(
-        f"Mode ineligible: {result['mode_ineligible_count']} · "
-        f"Filter excluded: {result['filter_excluded_count']} · "
-        f"Outside top N: {result['top_n_excluded_count']}"
-    )
-    rows = exclusion_rows(result)
-    if not rows:
-        st.caption("No known candidate tickers were excluded.")
-        return
-    st.dataframe(rows, hide_index=True, width="stretch")
-
-
-def render_screening_result(result: Mapping[str, object]) -> None:
-    """Render one service response without changing its analytical content."""
-
-    _render_snapshot_and_request(result)
-    _render_ranked_companies(result)
-    _render_unknown_tickers(result)
-    _render_exclusions(result)
-
-
-def _render_stock_detail_header(result: Mapping[str, object]) -> None:
-    identity = result["identity"]  # type: ignore[index]
-    selected_mode = result["selected_mode"]  # type: ignore[index]
-    st.subheader(
-        f"{identity['ticker']} — {identity['company_name']}"
-    )
-    st.write(
-        f"{identity['sector']} · {identity['industry']} · "
-        f"CIK {identity['cik']}"
-    )
-    sec_entity_name = identity["sec_entity_name"]
-    if sec_entity_name:
-        st.caption(f"SEC entity name: {sec_entity_name}")
-
-    run_column, date_column, mode_column, eligibility_column = st.columns(4)
-    run_column.metric("Accepted run ID", result["accepted_run_id"])
-    date_column.metric("As-of date", result["as_of_date"])
-    mode_column.metric("Selected mode", _format_mode(result["mode"]))
-    eligibility_column.metric(
-        "Mode ranking eligibility",
-        (
-            "Eligible"
-            if selected_mode["eligible_for_ranking"]
-            else "Not eligible"
-        ),
-    )
-    st.caption(
-        "Scoring contract "
-        f"{result['scoring_contract_version']} · Factor model "
-        f"{result['factor_model_version']} · Screening modes "
-        f"{result['screening_modes_version']} · Input feature run "
-        f"{result['input_feature_run_id']} · Data contract "
-        f"{result['input_contract_version']}"
-    )
-
-    score_column, factors_column = st.columns(2)
-    score_column.metric(
-        f"{_format_mode(result['mode'])} score",
-        _format_number(selected_mode["score"]),
-    )
-    factors_column.metric(
-        "Available factors",
-        selected_mode["factor_count"]
-        if selected_mode["factor_count"] is not None
-        else "Unavailable",
-    )
-    if selected_mode["ranking_exclusion_reasons"]:
-        st.warning(
-            "Selected-mode ranking exclusion reasons: "
-            + ", ".join(selected_mode["ranking_exclusion_reasons"])
-        )
-    if selected_mode["unavailable_reason"]:
-        st.warning(
-            "Selected-mode score unavailable reason: "
-            + str(selected_mode["unavailable_reason"])
-        )
-
-
-def _render_detail_market(result: Mapping[str, object]) -> None:
-    st.subheader("Market snapshot and verified history coverage")
-    snapshot = result["market_snapshot"]  # type: ignore[index]
-    price_column, cap_column, volume_column = st.columns(3)
-    price_column.metric(
-        "Latest adjusted daily price",
-        _format_number(snapshot["price"], currency=True),
-    )
-    cap_column.metric(
-        "Market-cap proxy",
-        _format_number(snapshot["market_cap_proxy"], currency=True),
-    )
-    volume_column.metric(
-        "20-day average share volume",
-        _format_number(
-            snapshot["average_volume_20d"],
-            suffix=" shares",
-        ),
-    )
-    st.caption(
-        "Market-cap proxy is price times validated shares outstanding; it is "
-        "not authoritative market capitalization. Volume is measured in "
-        "shares, and the market snapshot is latest-available daily data."
-    )
-
-    history = result["price_history"]  # type: ignore[index]
-    history_columns = st.columns(4)
-    history_columns[0].metric("Price-history source", history["source"])
-    history_columns[1].metric("History start", history["start_date"])
-    history_columns[2].metric("History end", history["end_date"])
-    history_columns[3].metric("History rows used", history["history_rows"])
-    if history["series_available"]:
+    with st.expander("Dates, quality, and next research questions"):
         st.dataframe(
-            history["series"],
+            [
+                {"Date field": name, "Value": value}
+                for name, value in report["data_dates"].items()
+            ],
             hide_index=True,
             width="stretch",
         )
-    else:
-        st.info(history["availability_reason"])
-
-    st.markdown("**Stored market features**")
-    st.dataframe(
-        result["market_features"],
-        hide_index=True,
-        width="stretch",
-    )
-    st.markdown("**Market data-quality evidence**")
-    st.dataframe(
-        [
-            {
-                "Evidence": field_name,
-                "Value": "Unavailable" if value is None else str(value),
-            }
-            for field_name, value in result[  # type: ignore[union-attr]
-                "market_quality"
-            ].items()
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-
-
-def _render_detail_fundamentals(result: Mapping[str, object]) -> None:
-    st.subheader("Fundamentals and filing dates")
-    fundamentals = result["fundamentals"]  # type: ignore[index]
-    source_column, period_column, filing_column, age_column = st.columns(4)
-    source_column.metric("Fundamental source", fundamentals["source"])
-    period_column.metric(
-        "Latest fiscal period end",
-        fundamentals["latest_period_end"],
-    )
-    filing_column.metric(
-        "Latest filing across included fundamentals",
-        fundamentals["latest_filed_date"],
-    )
-    age_column.metric(
-        "Fundamental age at as-of date",
-        (
-            f"{fundamentals['fundamental_age_days']} days"
-            if fundamentals["fundamental_age_days"] is not None
-            else "Unavailable"
-        ),
-    )
-    st.dataframe(
-        fundamentals["metrics"],
-        hide_index=True,
-        width="stretch",
-    )
-    st.caption(
-        "The filing date above is snapshot-wide: it is the latest filing date "
-        "across included fundamental inputs. Metric-specific filing dates are "
-        "not stored in the accepted artifact. "
-        "Market-cap and annual P/E values are stored historical proxies, not "
-        "authoritative vendor market capitalization or forward/vendor P/E. "
-        "Raw profit margin is audit-only; the validated profit margin is the "
-        "scoring input."
-    )
-
-
-def _render_detail_factors(result: Mapping[str, object]) -> None:
-    st.subheader("Factor and metric evidence")
-    selected_mode = result["selected_mode"]  # type: ignore[index]
-    factor_details = result["factor_details"]  # type: ignore[index]
-    st.dataframe(
-        [
-            {
-                "Factor": factor["label"],
-                "Score": factor["score"],
-                "Available component count": factor["component_count"],
-                "Unavailable reason": factor["unavailable_reason"],
-            }
-            for factor in factor_details
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-    st.caption(
-        "A higher Risk score means lower measured risk. A higher Sector "
-        "Strength score means stronger measured sector relative strength."
-    )
-
-    st.markdown("**Selected-mode effective factor weights**")
-    st.dataframe(
-        [
-            {
-                "Factor": FACTOR_LABELS.get(factor_name, factor_name),
-                "Effective factor weight": weight,
-            }
-            for factor_name, weight in selected_mode[
-                "effective_factor_weights"
-            ].items()
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-    st.caption(
-        "Available factors: "
-        + (
-            ", ".join(
-                FACTOR_LABELS.get(factor_name, factor_name)
-                for factor_name in selected_mode["available_factors"]
-            )
-            if selected_mode["available_factors"]
-            else "None"
+        quality = report["quality"]
+        st.write(
+            "Eligible for scoring: "
+            + ("Yes" if quality["eligible_for_scoring"] else "No")
         )
-    )
-
-    for factor in factor_details:
-        with st.expander(f"{factor['label']} metric evidence"):
-            st.write(
-                "Effective metric weights: "
-                + (
-                    ", ".join(
-                        f"{metric}={weight:.2%}"
-                        for metric, weight in factor[
-                            "effective_metric_weights"
-                        ].items()
-                    )
-                    if factor["effective_metric_weights"]
-                    else "None"
-                )
-            )
-            st.caption(
-                "Available components: "
-                + (
-                    ", ".join(factor["available_components"])
-                    if factor["available_components"]
-                    else "None"
-                )
-            )
-            if factor["unavailable_reason"]:
-                st.warning(
-                    "Factor unavailable reason: "
-                    + str(factor["unavailable_reason"])
-                )
-            st.dataframe(
-                factor["components"],
-                hide_index=True,
-                width="stretch",
-            )
-
-
-def _render_detail_sector_context(result: Mapping[str, object]) -> None:
-    st.subheader("Sector context")
-    context = result["sector_context"]  # type: ignore[index]
-    st.dataframe(
-        [
-            {
-                "Sector": context["sector"],
-                "Industry": context["industry"],
-                "Company 3-month relative strength versus SPY": context[
-                    "company_relative_strength_3m"
-                ],
-                "Sector median 3-month relative strength": context[
-                    "sector_median_relative_strength_3m"
-                ],
-                "Sector strength member count": context[
-                    "sector_strength_member_count"
-                ],
-                "Sector Strength score": context["sector_strength_score"],
-            }
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-    st.caption(
-        "Sector context is limited to stored accepted-snapshot evidence; this "
-        "view does not create a market or sector overview."
-    )
-
-
-def _render_detail_quality_and_explanations(
-    result: Mapping[str, object],
-) -> None:
-    st.subheader("Quality, provenance, and research evidence")
-    quality = result["quality"]  # type: ignore[index]
-    st.metric(
-        "Base scoring eligibility",
-        "Eligible" if quality["eligible_for_scoring"] else "Not eligible",
-    )
-    if quality["missing_inputs"]:
-        st.info("Missing inputs: " + ", ".join(quality["missing_inputs"]))
-    else:
-        st.caption("Missing inputs: none reported.")
-    if quality["warnings"]:
-        st.warning("Warnings: " + "; ".join(quality["warnings"]))
-    else:
-        st.caption("Warnings: none reported.")
-    if quality["stale_fundamental_metrics"]:
-        st.warning(
-            "Stale fundamental metrics: "
-            + ", ".join(quality["stale_fundamental_metrics"])
-        )
-    if quality["base_exclusion_reasons"]:
-        st.warning(
-            "Base scoring exclusion reasons: "
-            + ", ".join(quality["base_exclusion_reasons"])
-        )
-    for error_name in ("market_error", "fundamental_error"):
-        if quality[error_name]:
-            st.warning(f"{error_name}: {quality[error_name]}")
-
-    st.markdown("**Relevant market and fundamental dates**")
-    st.dataframe(
-        [
-            {
-                "Relevant date": DATE_LABELS.get(field_name, field_name),
-                "Value": value if value is not None else "Unavailable",
-            }
-            for field_name, value in result[  # type: ignore[union-attr]
-                "data_dates"
-            ].items()
-        ],
-        hide_index=True,
-        width="stretch",
-    )
-
-    strength_column, risk_column = st.columns(2)
-    with strength_column:
-        _render_evidence_items(
-            "Strengths",
-            result["strengths"],  # type: ignore[arg-type]
-        )
-    with risk_column:
-        _render_evidence_items("Risks", result["risks"])  # type: ignore[arg-type]
-
-    st.markdown("**Reason codes**")
-    st.markdown(
-        ", ".join(f"`{code}`" for code in result["reason_codes"])  # type: ignore[index]
-        or "None reported."
-    )
-    st.markdown("**Next research questions**")
-    questions = result["next_research_questions"]  # type: ignore[index]
-    if questions:
-        for question in questions:
+        for question in report["next_research_questions"]:
             st.markdown(f"- {question}")
+
+
+def _render_analyze_view() -> None:
+    st.title("Analyze a Ticker")
+    st.write(
+        "Enter one ticker for a concise evidence-backed report. Accepted-run "
+        "securities keep their frozen factor scores; explicit online refresh "
+        "adds a display-only latest quote."
+    )
+    with st.form("ticker_analysis_controls", enter_to_submit=False):
+        ticker = st.text_input("Ticker", placeholder="AAPL", key="analysis_ticker")
+        mode = st.selectbox(
+            "Research mode",
+            options=live_analysis.SUPPORTED_MODES,
+            format_func=lambda value: MODE_LABELS[value],
+            key="analysis_mode",
+        )
+        refresh = st.checkbox(
+            "Refresh identity / latest quote online",
+            value=False,
+            help=(
+                "This is the only control that permits provider network calls. "
+                "It never refreshes or changes factor scores."
+            ),
+            key="analysis_refresh",
+        )
+        use_ai = st.checkbox(
+            "Use OpenAI to arrange the concise accepted-evidence report",
+            value=False,
+            help=(
+                "Optional. The model may only select existing evidence sentence "
+                "order and cannot add facts, targets, or buy/sell advice."
+            ),
+            key="analysis_use_ai",
+        )
+        submitted = st.form_submit_button(
+            "Analyze ticker",
+            type="primary",
+            key="run_analysis",
+            width="stretch",
+        )
+
+    if not submitted:
+        st.info(
+            "Local accepted evidence is the default. Enable online refresh only "
+            "when you want a current provider quote or a ticker outside the run."
+        )
+        _render_disclaimer()
+        return
+
+    request = build_analysis_request(ticker=ticker, mode=mode, refresh=refresh)
+    try:
+        with st.spinner("Loading verified evidence..."):
+            result = execute_analysis(request)
+    except (
+        live_analysis.LiveAnalysisValidationError,
+        live_analysis.LiveAnalysisNotFoundError,
+        live_analysis.LiveAnalysisDataError,
+    ) as error:
+        st.error(f"Ticker analysis failed: {error}")
+        _render_disclaimer()
+        return
+
+    rendered_ai = None
+    if use_ai:
+        if result["data_scope"] != "accepted_snapshot":
+            st.info(
+                "AI rendering is skipped because this ticker has no accepted "
+                "scoring report to ground it."
+            )
+        else:
+            try:
+                with st.spinner("Arranging existing evidence..."):
+                    rendered_ai = ai_report.render_ai_research_report(
+                        result["report"]
+                    )
+            except ai_report.AIReportValidationError as error:
+                st.error(f"AI report source validation failed: {error}")
+    render_analysis_result(result, rendered_ai)
+    _render_disclaimer()
+
+
+def _render_screening_result(result: Mapping[str, object]) -> None:
+    metadata = st.columns(4)
+    metadata[0].metric("Accepted run ID", result["accepted_run_id"])
+    metadata[1].metric("As-of date", result["as_of_date"])
+    metadata[2].metric("Returned", result["returned_count"])
+    metadata[3].metric("Excluded", result["excluded_count"])
+    stocks = result["stocks"]  # type: ignore[index]
+    if stocks:
+        st.dataframe(ranked_company_rows(result), hide_index=True, width="stretch")
     else:
-        st.caption("None reported.")
-
-
-def render_stock_detail_result(result: Mapping[str, object]) -> None:
-    """Render one detail-service response without adding analytics."""
-
-    _render_stock_detail_header(result)
-    _render_detail_market(result)
-    _render_detail_fundamentals(result)
-    _render_detail_factors(result)
-    _render_detail_sector_context(result)
-    _render_detail_quality_and_explanations(result)
-
-
-def _render_known_error(error: Exception) -> None:
-    if isinstance(error, screening.ScreeningValidationError):
-        st.error(f"Invalid screening request: {error}")
-        return
-    if isinstance(error, screening.ScreeningDataError):
-        st.error(f"Accepted screening data error: {error}")
-        return
-    st.error(f"Accepted scoring run could not be verified: {error}")
-
-
-def _render_stock_detail_error(error: Exception) -> None:
-    if isinstance(error, stock_detail.StockDetailValidationError):
-        st.error(f"Invalid Stock Detail request: {error}")
-        return
-    if isinstance(error, stock_detail.StockDetailNotFoundError):
-        st.error(f"Stock Detail ticker not found: {error}")
-        return
-    if isinstance(error, stock_detail.StockDetailDataError):
-        st.error(f"Accepted Stock Detail data error: {error}")
-        return
-    st.error(f"Accepted scoring run could not be verified: {error}")
-
-
-def _render_disclaimer() -> None:
-    st.divider()
-    st.caption(DISCLAIMER)
+        st.info("No ranked companies matched the requested filters.")
+    st.caption(
+        "Rows remain in the deterministic service order. The UI does not "
+        "rescore or rerank them."
+    )
+    unknown = result["unknown_tickers"]  # type: ignore[index]
+    if unknown:
+        st.warning(
+            "Not present in the accepted snapshot: " + ", ".join(unknown)
+        )
+        st.dataframe(
+            [{"Unknown custom ticker": ticker} for ticker in unknown],
+            hide_index=True,
+            width="stretch",
+        )
+    exclusions = exclusion_rows(result)
+    if exclusions:
+        with st.expander("Exclusions and reason codes"):
+            st.dataframe(exclusions, hide_index=True, width="stretch")
 
 
 def _render_screener_view() -> None:
-    st.title("Equity Screening Agent")
+    st.title("Screen Stocks")
     st.write(
-        "Screen the frozen accepted local scoring snapshot. All eligibility, "
-        "validation, filtering, ticker normalization, sorting, scores, weights, "
-        "and explanations come from `src.screening.screen_stocks`."
+        "Filter the verified accepted snapshot by mode, sector, liquidity "
+        "proxies, and stored factor scores."
     )
-    st.caption(
-        "Latest-available daily-data research support · Local and "
-        "network-independent · No rescoring in Streamlit"
-    )
-
     with st.form("stock_screener_controls", enter_to_submit=False):
         first_column, second_column = st.columns(2)
         with first_column:
@@ -853,12 +536,8 @@ def _render_screener_view() -> None:
                 key="universe",
             )
             custom_ticker_text = st.text_area(
-                "Custom tickers (one per line)",
+                "Custom accepted-run tickers (one per line)",
                 placeholder="AAPL\nMSFT\nBRK.B",
-                help=(
-                    "Used only for the custom universe. Ticker normalization "
-                    "and unknown-ticker handling remain in screen_stocks."
-                ),
                 key="custom_tickers",
             )
             mode = st.selectbox(
@@ -870,8 +549,10 @@ def _render_screener_view() -> None:
             sectors = st.multiselect(
                 "Sectors",
                 options=SECTOR_OPTIONS,
-                help="Leave empty to include all sectors.",
                 key="sectors",
+            )
+            top_n = st.number_input(
+                "Top N", min_value=1, value=20, step=1, key="top_n"
             )
         with second_column:
             minimum_price = st.number_input(
@@ -879,7 +560,6 @@ def _render_screener_view() -> None:
                 min_value=0.0,
                 value=None,
                 placeholder="No minimum",
-                help="Latest adjusted daily price.",
                 key="minimum_price",
             )
             minimum_market_cap_proxy = st.number_input(
@@ -887,42 +567,37 @@ def _render_screener_view() -> None:
                 min_value=0.0,
                 value=None,
                 placeholder="No minimum",
-                help=(
-                    "Price times validated shares outstanding. This is a proxy, "
-                    "not authoritative market capitalization."
-                ),
+                help="A proxy, not authoritative market capitalization.",
                 key="minimum_market_cap_proxy",
             )
             minimum_average_volume_20d = st.number_input(
-                "Minimum 20-day average share volume (shares)",
+                "Minimum 20-day average share volume",
                 min_value=0.0,
                 value=None,
                 placeholder="No minimum",
-                help="Average daily share volume over the trailing 20 days.",
+                help="Average daily share volume, not dollar liquidity.",
                 key="minimum_average_volume_20d",
             )
-            top_n = st.number_input(
-                "Top N",
-                min_value=1,
-                value=20,
-                step=1,
-                key="top_n",
-            )
+            minimum_factor_scores: dict[str, float] = {}
+            for factor_name, factor_label in FACTOR_LABELS.items():
+                value = st.number_input(
+                    f"Minimum {factor_label}",
+                    min_value=0.0,
+                    max_value=100.0,
+                    value=None,
+                    placeholder="No minimum",
+                    key=f"minimum_factor_{factor_name}",
+                )
+                if value is not None:
+                    minimum_factor_scores[factor_name] = value
         submitted = st.form_submit_button(
-            "Run screen",
-            type="primary",
-            key="run_screen",
-            width="stretch",
+            "Run screen", type="primary", key="run_screen", width="stretch"
         )
 
     if not submitted:
-        st.info(
-            "Choose the screening inputs and select **Run screen**. The accepted "
-            "artifact is verified only when a screen is requested."
-        )
+        st.info("Set any optional filters, then run the deterministic screen.")
         _render_disclaimer()
         return
-
     request = build_screening_request(
         universe=universe,
         custom_ticker_text=custom_ticker_text,
@@ -931,108 +606,204 @@ def _render_screener_view() -> None:
         minimum_price=minimum_price,
         minimum_market_cap_proxy=minimum_market_cap_proxy,
         minimum_average_volume_20d=minimum_average_volume_20d,
+        minimum_factor_scores=minimum_factor_scores,
         top_n=top_n,
     )
     try:
-        with st.spinner("Verifying the accepted run and screening companies..."):
+        with st.spinner("Verifying and screening the accepted run..."):
             result = execute_screening(request)
-    except (
-        screening.ScreeningValidationError,
-        screening.ScreeningDataError,
-        scoring_contract.ScoringContractError,
-    ) as error:
-        _render_known_error(error)
-        _render_disclaimer()
-        return
-
-    render_screening_result(result)
+    except screening.ScreeningValidationError as error:
+        st.error(f"Invalid screening request: {error}")
+    except screening.ScreeningDataError as error:
+        st.error(f"Accepted screening data error: {error}")
+    except scoring_contract.ScoringContractError as error:
+        st.error(f"Accepted scoring run could not be verified: {error}")
+    else:
+        _render_screening_result(result)
     _render_disclaimer()
 
 
-def _render_stock_detail_view() -> None:
-    st.title("Equity Screening Agent")
+def _render_comparison_view() -> None:
+    st.title("Compare Stocks")
     st.write(
-        "Inspect one security in the frozen accepted local scoring snapshot. "
-        "Ticker normalization, validation, stored feature projection, factor "
-        "evidence, eligibility, and explanations come from "
-        "`src.stock_detail.get_stock_detail`."
+        "Compare two to five accepted-run tickers in the exact order entered. "
+        "Stored scores are neither rescaled nor reranked."
     )
-    st.caption(
-        "Latest-available daily-data research support · Local and "
-        "network-independent · No scoring, ranking, or provider calls in "
-        "Streamlit"
-    )
-
-    with st.form("stock_detail_controls", enter_to_submit=False):
-        ticker = st.text_input(
-            "Ticker",
-            placeholder="AAPL",
-            help=(
-                "Enter a ticker from the accepted local S&P 500 snapshot. "
-                "Unknown tickers are not fetched."
-            ),
-            key="detail_ticker",
+    with st.form("comparison_controls", enter_to_submit=False):
+        ticker_text = st.text_area(
+            "Tickers (one per line)",
+            placeholder="AAPL\nMSFT",
+            key="comparison_tickers",
         )
         mode = st.selectbox(
-            "Stock Detail screening mode",
-            options=stock_detail.SUPPORTED_MODES,
+            "Comparison mode",
+            options=screening.SUPPORTED_MODES,
             format_func=lambda value: MODE_LABELS[value],
-            key="detail_mode",
+            key="comparison_mode",
         )
         submitted = st.form_submit_button(
-            "Load Stock Detail",
-            type="primary",
-            key="load_stock_detail",
+            "Compare", type="primary", key="run_comparison", width="stretch"
+        )
+    if not submitted:
+        st.info("Enter two to five accepted-run tickers.")
+        _render_disclaimer()
+        return
+    request = {"tickers": ticker_text.splitlines(), "mode": mode}
+    try:
+        with st.spinner("Loading requested-order evidence..."):
+            result = execute_comparison(request)
+    except comparison.ComparisonValidationError as error:
+        st.error(f"Invalid comparison request: {error}")
+    except comparison.ComparisonDataError as error:
+        st.error(f"Accepted comparison data error: {error}")
+    except scoring_contract.ScoringContractError as error:
+        st.error(f"Accepted scoring run could not be verified: {error}")
+    else:
+        snapshot_parts = []
+        if result.get("accepted_run_id") is not None:
+            snapshot_parts.append(f"Accepted run {result['accepted_run_id']}")
+        if result.get("as_of_date") is not None:
+            snapshot_parts.append(f"as of {result['as_of_date']}")
+        snapshot_parts.append(_mode_label(result["mode"]))
+        st.caption(" · ".join(snapshot_parts))
+        st.dataframe(comparison_rows(result), hide_index=True, width="stretch")
+        if not result["comparison_available"]:
+            st.info(
+                "A comparison requires at least two available accepted-run "
+                "securities. Unknown rows remain visible in requested order."
+            )
+        if result["unknown_tickers"]:
+            st.warning(
+                "Unknown accepted-run tickers: "
+                + ", ".join(result["unknown_tickers"])
+            )
+    _render_disclaimer()
+
+
+def _overview_metric_rows(scope: Mapping[str, object]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for field_name, summary in scope["metrics"].items():  # type: ignore[index]
+        rows.append(
+            {
+                "Metric": field_name,
+                "Median": summary["median"],
+                "Coverage": summary["coverage_ratio"],
+                "Positive ratio": summary.get("positive_ratio"),
+            }
+        )
+    return rows
+
+
+def _render_overview_view() -> None:
+    st.title("Market / Sector Overview")
+    st.write(
+        "Summarize the accepted daily snapshot using equal-security medians and "
+        "return breadth. This is not a live or capitalization-weighted index."
+    )
+    with st.form("overview_controls", enter_to_submit=False):
+        mode = st.selectbox(
+            "Overview mode",
+            options=screening.SUPPORTED_MODES,
+            format_func=lambda value: MODE_LABELS[value],
+            key="overview_mode",
+        )
+        sectors = st.multiselect(
+            "Limit to sectors",
+            options=SECTOR_OPTIONS,
+            key="overview_sectors",
+        )
+        submitted = st.form_submit_button(
+            "Build overview", type="primary", key="run_overview", width="stretch"
+        )
+    if not submitted:
+        st.info("Leave sectors empty for the full accepted market snapshot.")
+        _render_disclaimer()
+        return
+    request = {"mode": mode, "sectors": sectors or None}
+    try:
+        with st.spinner("Aggregating accepted evidence..."):
+            result = execute_overview(request)
+    except overview.OverviewValidationError as error:
+        st.error(f"Invalid overview request: {error}")
+    except overview.OverviewDataError as error:
+        st.error(f"Accepted overview data error: {error}")
+    except scoring_contract.ScoringContractError as error:
+        st.error(f"Accepted scoring run could not be verified: {error}")
+    else:
+        header = st.columns(4)
+        header[0].metric("Accepted run ID", result["accepted_run_id"])
+        header[1].metric("As-of date", result["as_of_date"])
+        header[2].metric("Securities", result["market"]["security_count"])
+        header[3].metric("Sectors", result["sector_count"])
+        price_dates = result["data_dates"]["price_data_end"]
+        filing_dates = result["data_dates"]["fundamental_filed_date"]
+        st.caption(
+            "Market data through "
+            f"{price_dates['latest'] or 'Unavailable'} "
+            f"({price_dates['available_count']}/"
+            f"{result['market']['security_count']} securities); "
+            "fundamental filings through "
+            f"{filing_dates['latest'] or 'Unavailable'} "
+            f"({filing_dates['available_count']}/"
+            f"{result['market']['security_count']} securities)."
+        )
+        st.dataframe(
+            _overview_metric_rows(result["market"]),
+            hide_index=True,
             width="stretch",
         )
-
-    if not submitted:
-        st.info(
-            "Enter one accepted-snapshot ticker and select **Load Stock "
-            "Detail**. The accepted artifact is verified only when detail is "
-            "requested."
+        sector_rows = [
+            {
+                "Sector": item["sector"],
+                "Securities": item["security_count"],
+                "Mode eligible": item["mode_eligible_count"],
+                "Mode score median": item["metrics"][f"{result['mode']}_score"][
+                    "median"
+                ],
+                "1-month return median": item["metrics"]["return_1m"]["median"],
+                "1-month positive ratio": item["metrics"]["return_1m"][
+                    "positive_ratio"
+                ],
+            }
+            for item in result["sectors"]
+        ]
+        st.dataframe(sector_rows, hide_index=True, width="stretch")
+        st.caption(
+            "Equal-security cross-sectional summary. A higher Risk score means "
+            "lower measured risk."
         )
-        _render_disclaimer()
-        return
-
-    request = build_stock_detail_request(ticker=ticker, mode=mode)
-    try:
-        with st.spinner(
-            "Verifying the accepted run and loading stored evidence..."
-        ):
-            result = execute_stock_detail(request)
-    except (
-        stock_detail.StockDetailValidationError,
-        stock_detail.StockDetailNotFoundError,
-        stock_detail.StockDetailDataError,
-        scoring_contract.ScoringContractError,
-    ) as error:
-        _render_stock_detail_error(error)
-        _render_disclaimer()
-        return
-
-    render_stock_detail_result(result)
     _render_disclaimer()
 
 
 def main() -> None:
     st.set_page_config(
-        page_title="Equity Screening Agent",
+        page_title="Equity Research Screener",
         page_icon="📊",
         layout="wide",
     )
     view = st.sidebar.radio(
-        "View",
-        options=("Stock Screener", "Stock Detail"),
+        "Research task",
+        options=(
+            "Analyze Ticker",
+            "Screen Stocks",
+            "Compare Stocks",
+            "Market / Sector",
+        ),
         key="view",
     )
     st.sidebar.caption(
-        "Both views use the same frozen accepted local scoring boundary."
+        "Read-only research. Provider calls require explicit refresh; an "
+        "OpenAI call requires its separate checkbox. No trading or personalized "
+        "recommendations."
     )
-    if view == "Stock Detail":
-        _render_stock_detail_view()
-        return
-    _render_screener_view()
+    if view == "Analyze Ticker":
+        _render_analyze_view()
+    elif view == "Screen Stocks":
+        _render_screener_view()
+    elif view == "Compare Stocks":
+        _render_comparison_view()
+    else:
+        _render_overview_view()
 
 
 if __name__ == "__main__":

@@ -164,7 +164,8 @@ def _result(
 
 
 def _app() -> AppTest:
-    return AppTest.from_file(str(APP_PATH), default_timeout=10).run()
+    at = AppTest.from_file(str(APP_PATH), default_timeout=10).run()
+    return at.radio(key="view").set_value("Screen Stocks").run()
 
 
 def _submit(at: AppTest) -> AppTest:
@@ -186,7 +187,7 @@ def test_streamlit_usage_telemetry_is_disabled() -> None:
     assert "gatherUsageStats = false" in config
 
 
-def test_execute_screening_forwards_all_eight_arguments_unchanged(
+def test_execute_screening_forwards_base_arguments_unchanged(
     monkeypatch,
 ) -> None:
     request = {
@@ -299,6 +300,17 @@ def test_app_controls_map_to_all_screening_arguments(monkeypatch) -> None:
     at.number_input(key="minimum_average_volume_20d").set_value(
         345_000.0
     ).run()
+    factor_minimums = {
+        "momentum": 55.0,
+        "quality": 60.0,
+        "valuation": 65.0,
+        "risk": 70.0,
+        "sector_strength": 75.0,
+    }
+    for factor_name, value in factor_minimums.items():
+        at.number_input(key=f"minimum_factor_{factor_name}").set_value(
+            value
+        ).run()
     at.number_input(key="top_n").set_value(7).run()
     at = _submit(at)
 
@@ -312,6 +324,7 @@ def test_app_controls_map_to_all_screening_arguments(monkeypatch) -> None:
             "minimum_price": 12.5,
             "minimum_market_cap_proxy": 2_500_000_000.0,
             "minimum_average_volume_20d": 345_000.0,
+            "minimum_factor_scores": factor_minimums,
             "top_n": 7,
         }
     ]
@@ -356,35 +369,20 @@ def test_app_renders_results_without_filtering_scoring_or_reordering(
     ranked = _dataframe_with_column(at, "Selected mode score")
     excluded = _dataframe_with_column(at, "Exclusion reasons")
     unknown = _dataframe_with_column(at, "Unknown custom ticker")
-    weights = _dataframe_with_column(at, "Effective factor weight")
-    dates = _dataframe_with_column(at, "Relevant date")
 
     assert ranked["Ticker"].tolist() == ["ZZZ", "AAA"]
     assert ranked["Selected mode score"].tolist() == [12.25, 99.75]
     assert excluded["Ticker"].tolist() == ["OUT"]
     assert excluded["Exclusion reasons"].tolist() == ["below_minimum:price"]
     assert unknown["Unknown custom ticker"].tolist() == ["UNKNOWN"]
-    assert list(weights["Factor"]) == list(stock_screener.FACTOR_LABELS.values())
-    assert "Market price date" in dates["Relevant date"].tolist()
-    assert any(
-        "synthetic_quality_warning" in warning.value
-        for warning in at.warning
-    )
+    assert ranked["Market data date"].tolist() == ["2026-07-10", "2026-07-10"]
+    assert ranked["Warnings"].tolist() == ["synthetic_quality_warning", ""]
+    assert ranked["Top strength"].iloc[0] == "Strong stored Momentum evidence."
+    assert ranked["Top risk"].iloc[0] == "Weak stored Sector Strength evidence."
     assert any("UNKNOWN" in warning.value for warning in at.warning)
-    assert any(
-        "annual_pe_proxy" in info.value for info in at.info
-    )
     metrics = {item.label: item.value for item in at.metric}
     assert metrics["Accepted run ID"] == "accepted_scores"
     assert metrics["As-of date"] == "2026-07-13"
-    rendered_markdown = "\n".join(str(item.value) for item in at.markdown)
-    assert "Strong stored Momentum evidence." in rendered_markdown
-    assert "Weak stored Sector Strength evidence." in rendered_markdown
-    assert "ranked_by_stored_score:balanced" in rendered_markdown
-    assert (
-        "What could change the stored evidence on the next snapshot?"
-        in rendered_markdown
-    )
     assert "Market-cap proxy (USD)" in ranked.columns
     assert "20-day average share volume" in ranked.columns
     assert "Risk (higher = lower measured risk)" in ranked.columns
