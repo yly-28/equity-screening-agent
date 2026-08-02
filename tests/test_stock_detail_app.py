@@ -307,6 +307,27 @@ def test_accepted_analysis_renders_scores_nulls_quote_and_evidence(monkeypatch) 
     assert "higher Risk score means lower measured risk" in captions
 
 
+def test_analysis_controls_disclose_each_network_boundary() -> None:
+    at = _app()
+
+    refresh_help = at.checkbox(key="analysis_refresh").help
+    ai_help = at.checkbox(key="analysis_use_ai").help
+    assert "market-data provider calls" in refresh_help
+    assert "OpenAI" in ai_help
+    assert "accepted factor and fundamental evidence" in ai_help
+    assert "API credits" in ai_help
+    assert "store=False" in ai_help
+    assert "final 200–300-character English brief" in ai_help
+    assert (
+        "Buy-leaning / Hold/watch / Sell-leaning / Insufficient evidence "
+        "research stance"
+    ) in ai_help
+    assert "conditional 6–12 month outlook" in ai_help
+    assert "neither the display-only live quote nor real-time news" in ai_help
+    assert "does not personalize advice" in ai_help
+    assert "cannot execute trades" in ai_help
+
+
 def test_ai_renderer_is_explicit_and_receives_only_accepted_report(monkeypatch) -> None:
     source = _accepted_analysis()
     ai_calls: list[object] = []
@@ -317,11 +338,28 @@ def test_ai_renderer_is_explicit_and_receives_only_accepted_report(monkeypatch) 
         return {
             "renderer": {
                 "status": "openai",
-                "model": "gpt-5.6-terra",
+                "model": "gpt-5.6-sol",
                 "fallback_reason": None,
+                "grounding": "accepted_factor_and_fundamental_evidence",
             },
             "headline": "ZZZ — grounded report",
-            "analysis": "ZZZ has a strong fit with the accepted evidence.",
+            "stance": "Buy-leaning",
+            "outlook_6_12m": "Constructive",
+            "confidence": "Medium",
+            "analysis": (
+                "Accepted evidence shows strong Momentum and solid profitability, "
+                "while valuation and snapshot age remain constraints. If revenue "
+                "growth and free-cash-flow conversion hold over 6–12 months, the "
+                "outlook is constructive; otherwise it turns cautious."
+            ),
+            "evidence_items": [
+                {"id": "summary", "category": "summary", "text": "source"},
+                {
+                    "id": "factor:momentum",
+                    "category": "factor",
+                    "text": "source",
+                },
+            ],
         }
 
     monkeypatch.setattr(ai_report, "render_ai_research_report", fake_ai)
@@ -332,10 +370,182 @@ def test_ai_renderer_is_explicit_and_receives_only_accepted_report(monkeypatch) 
     assert not at.exception
     assert ai_calls == [source["report"]]
     assert any("grounded report" in str(item.value) for item in at.markdown)
-    assert sum(
-        str(item.value) == source["report"]["summary"]
-        for item in at.markdown
-    ) == 1
+    assert any("Accepted evidence shows" in str(item.value) for item in at.markdown)
+    metrics = {item.label: item.value for item in at.metric}
+    assert metrics["Research stance"] == "Buy-leaning"
+    assert metrics["6–12 month outlook"] == "Constructive"
+    assert metrics["Confidence"] == "Medium"
+    assert any("gpt-5.6-sol" in item.value for item in at.success)
+    assert any(
+        "authored the fundamental and factor views" in item.value
+        and "rendered the conditional outlook and stance wording" in item.value
+        for item in at.success
+    )
+    markdown = "\n".join(str(item.value) for item in at.markdown)
+    assert "AI-assisted research brief" in markdown
+    captions = "\n".join(str(item.value) for item in at.caption)
+    assert "Accepted evidence references: summary · factor:momentum" in captions
+    assert "two OpenAI-authored analyses" in captions
+    assert "two locally rendered, evidence-bound statements" in captions
+    assert "not personalized advice" in captions
+    assert "does not execute trades" in captions
+    assert "nor real-time news" in captions
+    assert not any("OpenAI was not called" in item.value for item in at.info)
+
+
+def test_online_refresh_and_ai_brief_work_together_without_mixing_quote_evidence(
+    monkeypatch,
+) -> None:
+    source = _accepted_analysis(quote=True)
+    analysis_calls: list[dict[str, object]] = []
+    ai_calls: list[object] = []
+
+    def fake_analysis(**kwargs):
+        analysis_calls.append(kwargs)
+        return source
+
+    def fake_ai(report):
+        ai_calls.append(report)
+        return {
+            "renderer": {
+                "status": "openai",
+                "model": "gpt-5.6-sol",
+                "fallback_reason": None,
+                "grounding": "hybrid_model_analysis_and_local_evidence_rendering",
+            },
+            "headline": "ZZZ — AI-assisted research brief",
+            "stance": "Hold/watch",
+            "outlook_6_12m": "Neutral",
+            "confidence": "Medium",
+            "analysis": (
+                "Accepted fundamental evidence remains mixed with data limits. "
+                "Momentum leads while quality evidence constrains confidence. "
+                "If Momentum holds, 6–12m view stays neutral; otherwise weakens. "
+                "At 2026-07-13: Hold/watch; Neutral; confidence Medium."
+            ),
+            "evidence_items": [],
+        }
+
+    monkeypatch.setattr(live_analysis, "analyze_ticker", fake_analysis)
+    monkeypatch.setattr(ai_report, "render_ai_research_report", fake_ai)
+
+    at = _app()
+    at.text_input(key="analysis_ticker").set_value("AAPL").run()
+    at.checkbox(key="analysis_refresh").check().run()
+    at.checkbox(key="analysis_use_ai").check().run()
+    at = _submit_analysis(at)
+
+    assert not at.exception
+    assert analysis_calls == [
+        {"ticker": "AAPL", "mode": "balanced", "refresh": True}
+    ]
+    assert ai_calls == [source["report"]]
+    assert ai_calls[0] is source["report"]
+    assert "live_quote" not in ai_calls[0]
+    assert source["live_quote"]["price"] == 125.5
+    assert (
+        source["live_quote"]["scoring_use"]
+        == "display_only_not_used_for_factor_scoring"
+    )
+    assert any("gpt-5.6-sol" in item.value for item in at.success)
+    captions = "\n".join(str(item.value) for item in at.caption)
+    assert "display-only" in captions
+
+
+def test_ai_fallback_is_clearly_labeled_as_deterministic(monkeypatch) -> None:
+    source = _accepted_analysis()
+    monkeypatch.setattr(live_analysis, "analyze_ticker", lambda **kwargs: source)
+    monkeypatch.setattr(
+        ai_report,
+        "render_ai_research_report",
+        lambda report: {
+            "renderer": {
+                "status": "deterministic_fallback",
+                "model": "gpt-5.6-sol",
+                "fallback_reason": "missing_api_key",
+                "grounding": "deterministic_accepted_evidence",
+            },
+            "headline": "ZZZ — deterministic report",
+            "stance": "Insufficient evidence",
+            "outlook_6_12m": "Uncertain",
+            "confidence": "Low",
+            "analysis": source["report"]["summary"],
+            "evidence_items": [
+                {"id": "summary", "category": "summary", "text": "source"}
+            ],
+        },
+    )
+    at = _app()
+    at.checkbox(key="analysis_use_ai").check().run()
+    at = _submit_analysis(at)
+
+    assert not at.exception
+    assert not at.success
+    assert any("OpenAI was not called" in item.value for item in at.info)
+    assert any("deterministic report" in str(item.value) for item in at.markdown)
+    markdown = "\n".join(str(item.value) for item in at.markdown)
+    assert "Deterministic research brief" in markdown
+    assert "AI-assisted research brief" not in markdown
+    metrics = {item.label: item.value for item in at.metric}
+    assert metrics["Research stance"] == "Insufficient evidence"
+    assert metrics["6–12 month outlook"] == "Uncertain"
+    assert metrics["Confidence"] == "Low"
+    captions = "\n".join(str(item.value) for item in at.caption)
+    assert "Accepted evidence references: summary" in captions
+    assert "deterministic fallback uses accepted evidence only" in captions
+
+
+def test_invalid_ai_response_reports_safe_local_validation_detail(monkeypatch) -> None:
+    source = _accepted_analysis()
+    monkeypatch.setattr(live_analysis, "analyze_ticker", lambda **kwargs: source)
+    monkeypatch.setattr(
+        ai_report,
+        "render_ai_research_report",
+        lambda report: {
+            "renderer": {
+                "status": "deterministic_fallback",
+                "model": "gpt-5.6-sol",
+                "fallback_reason": "invalid_structured_output",
+                "validation_error_code": "uncited_fact",
+                "grounding": "deterministic_accepted_evidence",
+            },
+            "headline": "ZZZ — deterministic report",
+            "stance": "Hold/watch",
+            "outlook_6_12m": "Neutral",
+            "confidence": "Moderately high",
+            "analysis": source["report"]["summary"],
+            "evidence_items": [],
+        },
+    )
+
+    at = _app()
+    at.checkbox(key="analysis_use_ai").check().run()
+    at = _submit_analysis(at)
+
+    assert not at.exception
+    notice = "\n".join(str(item.value) for item in at.info)
+    assert "OpenAI returned a response" in notice
+    assert "local grounding checks rejected it" in notice
+    assert "a claim used a fact that was not present in its cited evidence" in notice
+    assert "OpenAI was not called" not in notice
+    assert "Traceback" not in notice
+    metrics = {item.label: item.value for item in at.metric}
+    assert metrics["Research stance"] == "Hold/watch"
+    assert metrics["6–12 month outlook"] == "Neutral"
+    assert metrics["Confidence"] == "Moderately high"
+
+
+def test_unknown_ai_validation_code_is_not_exposed() -> None:
+    notice = stock_screener._ai_fallback_notice(
+        {
+            "fallback_reason": "invalid_structured_output",
+            "validation_error_code": "Traceback: secret-provider-detail",
+        }
+    )
+
+    assert "one or more local response requirements were not satisfied" in notice
+    assert "Traceback" not in notice
+    assert "secret-provider-detail" not in notice
 
 
 def test_outside_ticker_is_unscored_and_skips_ai(monkeypatch) -> None:
@@ -354,6 +564,7 @@ def test_outside_ticker_is_unscored_and_skips_ai(monkeypatch) -> None:
 
     assert not at.exception
     assert calls == []
+    assert any("OpenAI was not called" in item.value for item in at.info)
     metrics = {item.label: item.value for item in at.metric}
     assert metrics["Evidence scope"] == "live_unscored"
     assert metrics["Selected mode score"] == "Unavailable"

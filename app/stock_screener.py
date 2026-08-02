@@ -57,6 +57,26 @@ FACTOR_LABELS = {
     "sector_strength": "Sector Strength",
 }
 
+AI_FALLBACK_MESSAGES = {
+    "missing_api_key": "the local OpenAI API key was unavailable",
+    "openai_sdk_unavailable": "the OpenAI client could not be initialized",
+    "openai_request_failed": "the OpenAI request did not complete",
+}
+
+AI_VALIDATION_ERROR_MESSAGES = {
+    "schema_mismatch": "the response did not match the required brief schema",
+    "length_out_of_range": "the brief was outside the required 200–300-character range",
+    "language_mismatch": "the brief did not satisfy the English-language requirement",
+    "evidence_mismatch": "one or more claims did not match their cited accepted evidence",
+    "uncited_fact": "a claim used a fact that was not present in its cited evidence",
+    "unsupported_claim": "a claim introduced an unsupported company assertion",
+    "factor_direction_mismatch": "a factor interpretation reversed the accepted score direction",
+    "stance_mismatch": "the stated research stance was internally inconsistent",
+    "outlook_mismatch": "the stated outlook was internally inconsistent",
+    "confidence_mismatch": "the stated confidence was internally inconsistent",
+    "prohibited_language": "the response used prohibited personalized or trading language",
+}
+
 DISCLAIMER = (
     "This output is generated for educational and research purposes only. "
     "It is not financial advice, investment advice, or a recommendation to "
@@ -278,6 +298,84 @@ def _render_evidence_items(
         st.markdown(f"- {item['summary']}{score_text}")
 
 
+def _ai_fallback_notice(renderer: Mapping[str, object]) -> str:
+    reason = str(renderer.get("fallback_reason"))
+    if reason == "invalid_structured_output":
+        message = (
+            "OpenAI returned a response, but local grounding checks rejected it"
+        )
+        validation_code = renderer.get("validation_error_code")
+        if validation_code is not None:
+            safe_detail = AI_VALIDATION_ERROR_MESSAGES.get(
+                str(validation_code),
+                "one or more local response requirements were not satisfied",
+            )
+            message += f" because {safe_detail}"
+        return message + ". Showing the deterministic accepted-evidence report."
+    if reason == "openai_request_failed":
+        return (
+            "The OpenAI request did not complete, so no AI-assisted brief was "
+            "accepted. Showing the deterministic accepted-evidence report."
+        )
+    detail = AI_FALLBACK_MESSAGES.get(reason)
+    if detail is not None:
+        return (
+            f"OpenAI was not called because {detail}. Showing the deterministic "
+            "accepted-evidence report."
+        )
+    return (
+        "No AI-assisted brief was accepted. Showing the deterministic "
+        "accepted-evidence report."
+    )
+
+
+def _render_ai_brief(rendered_ai: Mapping[str, object]) -> None:
+    renderer = rendered_ai["renderer"]  # type: ignore[assignment]
+    status = renderer["status"]
+    if status == "openai":
+        st.markdown("### AI-assisted research brief")
+        st.success(
+            f"{renderer['model']} authored the fundamental and factor views and "
+            "proposed the structured stance and outlook. The application enforced "
+            "their consistency and rendered the conditional outlook and stance "
+            "wording from accepted evidence."
+        )
+    else:
+        st.markdown("### Deterministic research brief")
+        st.info(_ai_fallback_notice(renderer))
+
+    st.markdown(f"**{rendered_ai['headline']}**")
+    summary_metrics = st.columns(3)
+    summary_metrics[0].metric("Research stance", rendered_ai["stance"])
+    summary_metrics[1].metric(
+        "6–12 month outlook",
+        rendered_ai["outlook_6_12m"],
+    )
+    summary_metrics[2].metric("Confidence", rendered_ai["confidence"])
+    st.write(rendered_ai["analysis"])
+
+    evidence_items = rendered_ai.get("evidence_items", [])
+    if evidence_items:
+        evidence_ids = [
+            str(item["id"]) for item in evidence_items  # type: ignore[index]
+        ]
+        st.caption("Accepted evidence references: " + " · ".join(evidence_ids))
+    if status == "openai":
+        st.caption(
+            "This AI-assisted general research view combines two OpenAI-authored "
+            "analyses with two locally rendered, evidence-bound statements. It is "
+            "not personalized advice, does not execute trades, and uses neither the "
+            "display-only live quote nor real-time news. Qualitative AI "
+            "interpretation can still be wrong."
+        )
+    else:
+        st.caption(
+            "This deterministic fallback uses accepted evidence only. It is not "
+            "personalized advice, does not execute trades, and uses no real-time "
+            "news."
+        )
+
+
 def render_analysis_result(
     result: Mapping[str, object],
     rendered_ai: Mapping[str, object] | None = None,
@@ -347,20 +445,7 @@ def render_analysis_result(
         st.markdown(f"### {posture['label']} research fit")
         st.write(report["summary"])
     else:
-        renderer = rendered_ai["renderer"]  # type: ignore[index]
-        st.markdown("### AI-arranged concise report")
-        st.markdown(f"**{rendered_ai['headline']}**")
-        st.write(rendered_ai["analysis"])
-        if renderer["status"] == "deterministic_fallback":
-            st.info(
-                "AI rendering was not used; deterministic evidence order was "
-                f"returned ({renderer['fallback_reason']})."
-            )
-        else:
-            st.caption(
-                f"OpenAI model {renderer['model']} selected only the order of "
-                "existing evidence sentences; it could not add facts or advice."
-            )
+        _render_ai_brief(rendered_ai)
     st.caption(posture["meaning"])
 
     factor_scores = report["factor_scores"]
@@ -428,17 +513,24 @@ def _render_analyze_view() -> None:
             "Refresh identity / latest quote online",
             value=False,
             help=(
-                "This is the only control that permits provider network calls. "
-                "It never refreshes or changes factor scores."
+                "This is the only control that permits market-data provider "
+                "calls. It never refreshes or changes factor scores."
             ),
             key="analysis_refresh",
         )
         use_ai = st.checkbox(
-            "Use OpenAI to arrange the concise accepted-evidence report",
+            "Generate an AI-assisted research brief",
             value=False,
             help=(
-                "Optional. The model may only select existing evidence sentence "
-                "order and cannot add facts, targets, or buy/sell advice."
+                "Optional. Sends normalized accepted factor and fundamental "
+                "evidence to OpenAI and may consume API credits; the request uses "
+                "store=False. The model authors the fundamental and factor views, "
+                "then selects a structured conditional 6–12 month outlook and general "
+                "Buy-leaning / Hold/watch / Sell-leaning / Insufficient evidence "
+                "research stance. The application renders the final 200–300-character "
+                "English brief from those choices and accepted evidence. The model "
+                "receives neither the display-only live quote nor real-time news, "
+                "does not personalize advice, and cannot execute trades."
             ),
             key="analysis_use_ai",
         )
@@ -474,12 +566,12 @@ def _render_analyze_view() -> None:
     if use_ai:
         if result["data_scope"] != "accepted_snapshot":
             st.info(
-                "AI rendering is skipped because this ticker has no accepted "
-                "scoring report to ground it."
+                "OpenAI was not called because this ticker has no accepted "
+                "scoring report to ground a generated brief."
             )
         else:
             try:
-                with st.spinner("Arranging existing evidence..."):
+                with st.spinner("Authoring the accepted-evidence research brief..."):
                     rendered_ai = ai_report.render_ai_research_report(
                         result["report"]
                     )

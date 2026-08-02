@@ -4,14 +4,16 @@ An explainable U.S. equity research workspace built around one simple flow:
 
 > Enter a ticker or factor constraints, then receive a concise, evidence-backed research view.
 
-The project is read-only research software. It is not a price predictor, personalized financial adviser, trading bot, or order-execution system.
+The project is read-only research software. It is not a validated numeric price-prediction model, personalized financial adviser, trading bot, or order-execution system.
 
 ## Current Status
 
-Phase 6 is complete for the current product scope.
+Phase 6 is complete for the current product scope. The post-Phase-6
+`agent/ai-report-upgrade` refinement adds a concise, evidence-cited AI research
+brief without changing any accepted-data or scoring contract.
 
 - The project virtual environment now uses Python `3.12.7` and pip `26.2`.
-- The complete deterministic suite passes: `346 passed`.
+- The complete deterministic suite passes: `508 passed`.
 - The accepted Phase 2 feature run remains `2026-07-13_sp500_v1_0_0`.
 - The accepted Phase 3 scoring run remains `2026-07-13_sp500_scores_v1_0_2`.
 - The accepted scored-matrix SHA-256 remains `32cb1036fc45f2eb73bbef15e7f4ad920e4585650b33722985565213f8f2ea81`.
@@ -20,10 +22,10 @@ Phase 6 is complete for the current product scope.
 - A local stdio MCP server and an authenticated localhost Streamable HTTP MCP server expose the same five read-only tools.
 - Online refresh is explicit. A latest quote is display-only and never changes an accepted factor score, eligibility decision, or ranking.
 - A ticker outside the accepted run can be resolved and quoted, but remains unscored when a trusted project GICS classification is unavailable.
-- Optional OpenAI report rendering can only rearrange sentences already present in the deterministic report. It cannot add facts, target prices, or buy/sell instructions.
+- Optional OpenAI-assisted report rendering produces one 200–300-character English-language brief. The model authors cited fundamental and factor views and selects a structured outlook, stance, confidence, and accepted-evidence driver; the application renders the conditional outlook and stance wording locally so semantically equivalent model phrasing cannot trigger a false `outlook_mismatch`.
 - No trading integration was added.
 
-Phase 5 was organized into `main` at `1e2f7a9`, and Phase 6 was developed on `agent/phase-6-mcp`. GitHub publication preserves that history while keeping `.env`, provider caches, and accepted processed artifacts outside version control.
+Phase 5 was organized into `main` at `1e2f7a9`; Phase 6 was merged through PR #2 at `fe2ea89`. The AI-report refinement is published separately from `agent/ai-report-upgrade` for review, while `.env`, provider caches, and accepted processed artifacts remain outside version control.
 
 ## Product Surface
 
@@ -35,7 +37,7 @@ Launch the Streamlit workspace:
 
 The sidebar contains four focused tasks:
 
-1. **Analyze Ticker** — the default. Returns a concise posture, stored factor scores, strengths, limitations, dates, and next questions. An explicit refresh can add a current provider quote or resolve a ticker outside the accepted run.
+1. **Analyze Ticker** — the default. Returns a concise posture, stored factor scores, strengths, limitations, dates, and next questions. An explicit refresh can add a current provider quote or resolve a ticker outside the accepted run. An optional AI-assisted brief analyzes accepted factor and fundamental evidence without changing scores. Refresh and AI may be enabled together; the display-only quote remains outside the AI request.
 2. **Screen Stocks** — filters the accepted snapshot by mode, sector, price, market-cap proxy, 20-day average share volume, and minimum stored factor scores.
 3. **Compare Stocks** — compares two to five accepted-run securities in the requested order without rescaling or reranking them.
 4. **Market / Sector** — reports equal-security medians, coverage, and return breadth for the accepted market snapshot and selected sectors.
@@ -73,7 +75,7 @@ cp .env.example .env
 TWELVE_DATA_API_KEY=...
 SEC_USER_AGENT="equity-screening-agent/0.1 Your Name your-email@example.com"
 OPENAI_API_KEY=...              # optional
-OPENAI_MODEL=gpt-5.6-terra      # optional override
+OPENAI_MODEL=gpt-5.6-sol        # optional override; this is the current default
 EQUITY_MCP_TOKEN=...            # 32+ characters for localhost HTTP
 ```
 
@@ -176,11 +178,26 @@ source = get_research_report("AAPL", mode="balanced")
 rendered = render_ai_research_report(source)
 ```
 
-The renderer uses the official OpenAI Responses API structured-output interface. The default model is `OPENAI_MODEL` or `gpt-5.6-terra`.
+`get_research_report` schema `1.1.0` includes an `analysis_evidence` `1.0.0` block that only projects existing normalized Stock Detail values: three market-snapshot fields, eight market signals, and nine core fundamental metrics. Values, JSON nulls, units, dates, source tags, and warnings are preserved; the report layer does not calculate a new metric or score.
 
-The model receives normalized accepted evidence and returns only an editorial plan containing a headline style and existing evidence IDs. Final sentences are copied from the deterministic source report. Missing credentials, API errors, refusals, or invalid structured output produce a deterministic fallback without leaking exception details or keys.
+The renderer uses the official OpenAI Responses API structured-output interface. The default model is `OPENAI_MODEL` or `gpt-5.6-sol`. It uses medium reasoning effort, low text verbosity, a strict Pydantic schema, a `2000` total output-token ceiling, a 45-second client timeout, zero automatic retries, and `store=False`. AI response schema `5.0.0` contains:
 
-No OpenAI key was configured during the final local smoke, so no live model request was made. Sixteen network-disabled AI boundary tests cover the OpenAI and fallback paths with an injected fake client.
+- a general research stance: `Buy-leaning`, `Hold/watch`, `Sell-leaning`, or `Insufficient evidence`;
+- a conditional 6–12 month outlook: `Constructive`, `Neutral`, `Cautious`, or `Uncertain`;
+- confidence: `Low`, `Medium`, or `Moderately high`;
+- exactly one 50–74-character cited English claim for fundamental analysis and one for factor analysis;
+- one accepted `conditional_driver_evidence_id` selected from the request's available evidence IDs;
+- no model-authored conditional-outlook or research-stance prose.
+
+The model is prompted to use only supplied evidence and may autonomously infer concise fundamental and factor views. Local validation requires factor and limitation evidence, plus fundamental evidence whenever it is available. Every model-cited item must be named with its canonical English topic, and numeric/date facts are bound to the corresponding cited topic within the same clause. Validation also checks each model-authored claim for English output, length, Risk-score direction, and known unsupported-company, guarantee, personalization, sizing, target, or execution language.
+
+The application then constructs the two-sided 6–12 month condition from an allowed, non-null accepted-evidence ID and the outlook enum. The driver is phrased as an improvement condition, so negative growth or a low factor is not recast as current positive support. An unknown model-selected driver is replaced deterministically with the first available accepted driver. The stance sentence is built from the accepted date plus a locally consistency-checked stance, outlook, confidence, and accepted posture; contradictory buy/cautious, sell/constructive, weak/buy, or strong/sell combinations become `Hold/watch` instead of forcing a whole-report fallback.
+
+The four claims are joined into one 200–300-character paragraph. Output provenance labels the fundamental/factor sections as `openai` and the conditional/stance sections as `local_structured_render`. Model prose must be single-line plain text and cannot introduce URLs or bare domains, Markdown/HTML, Unicode formatting controls, a live/provider/intraday quote, an uncited canonical or generic fundamental topic, spelled numeric-return forecasts, guaranteed outcomes, or direct buy/sell/trade/entry/position/stake language. Direction checks bind each cited topic to its nearest directional wording, including negation, so one sentence may describe two accepted metrics with different directions without a false mismatch. Clean quality cannot be presented as a limitation, actual quality problems cannot be presented as excellent, and Risk wording must preserve the frozen higher-score/lower-measured-risk meaning. Model-authored sections cannot restate the locally controlled outlook or confidence level. This removes the former brittle free-form outlook parser while preserving evidence IDs, qualitative safety, and consistent English output. An ineligible report can only return `Insufficient evidence / Uncertain / Low`.
+
+Missing credentials, SDK/API errors, refusals, or invalid model output return the same response schema with a clearly labeled 200–300-character deterministic fallback. Invalid model output also carries a stable, non-sensitive validation category without exposing model output, an exception, or a traceback. Deterministic, network-disabled tests cover official SDK serialization, multi-evidence claims, clause-level metric binding, per-claim English checks, all locally rendered driver/outlook combinations, structured-driver normalization, general buy/hold-watch/sell stances, safe fallbacks, bounded client behavior, secret handling, JSON preservation, and the simultaneous Refresh+AI UI path. A real live-model call remains an explicit user action because it transmits normalized accepted evidence and consumes API credits. The post-fix external AAPL smoke is pending that explicit data-transmission authorization.
+
+An exhaustive local fallback scan covered all `503 × 4 = 2,012` accepted ticker/mode combinations: `2,012` succeeded, zero failed, and every English brief was 232–266 characters including spaces.
 
 ## MCP Servers
 
@@ -236,7 +253,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
   tests/test_ai_report.py
 ```
 
-Latest provider/live/AI boundary result: `51 passed`.
+Latest provider/live/AI boundary result: `207 passed in 1.77s`.
 
 Run the combined Phase 4/5/6 service, UI, MCP, and HTTP boundary:
 
@@ -246,6 +263,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
   tests/test_stock_detail.py \
   tests/test_research_report.py \
   tests/test_live_analysis.py \
+  tests/test_ai_report.py \
   tests/test_comparison.py \
   tests/test_overview.py \
   tests/test_stock_screener_app.py \
@@ -254,7 +272,7 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q \
   tests/test_mcp_http.py
 ```
 
-Latest combined boundary result: `181 passed in 4.89s`.
+Latest combined boundary result: `359 passed in 5.85s`.
 
 Run everything:
 
@@ -262,7 +280,7 @@ Run everything:
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q
 ```
 
-Latest complete result: `346 passed in 20.47s` on Python 3.12.7.
+Latest complete result: `508 passed in 21.57s` on Python 3.12.7.
 
 ## Operational Limitations
 
@@ -272,9 +290,10 @@ Latest complete result: `346 passed in 20.47s` on Python 3.12.7.
 - Twelve Data quote/profile availability, freshness, credit cost, and exchange timing depend on the configured subscription. `/profile` was not available under the tested account tier.
 - Provider cache writes are not yet atomic. This is acceptable for the current local single-user process, but concurrent refresh deployment needs atomic replace or locking.
 - SEC online access requires an identifying `SEC_USER_AGENT`.
-- AI rendering is optional and accepted-evidence-only. It does not generate new investment facts or advice.
+- AI rendering is optional and accepted-evidence-only. The model can propose a structured qualitative outlook and non-personalized general buy/hold-watch/sell research stance; the application renders their final wording locally. It does not receive news, forward estimates, management guidance, multi-period raw fundamentals, or the display-only live quote. It cannot refresh scores, provide target prices or position sizing, personalize advice, or issue trade instructions.
+- Evidence citations make the output auditable, but prompt constraints and local heuristic checks cannot prove every qualitative inference. The AI can still be wrong, and the stance is not a validated return forecast.
 - The HTTP token is suitable only for a local single-user process. There is no production IdP, TLS termination, user attribution, expiry, revocation, rate limit, or audit service.
-- There is no broker connection, portfolio optimization, transaction execution, price target, or personalized buy/sell recommendation.
+- There is no broker connection, portfolio optimization, transaction execution, price target, or personalized buy/sell recommendation. The AI stance is a general snapshot-based research signal, not a suitability determination.
 - Ignored accepted artifacts and provider caches must be preserved locally.
 
 ## Next Assignment
@@ -284,7 +303,7 @@ The next useful increment is operational hardening, not more product surface:
 1. Decide whether the localhost HTTP server should be deployed. If yes, select a real IdP/reverse-proxy design and add HTTPS, expiring tokens, audience checks, rate and spend limits.
 2. Approve a trustworthy exact GICS-compatible classification source before scoring any outside-run ticker.
 3. Build and validate a new accepted snapshot before claiming current factor scores.
-4. Add outcome/backtest evaluation before changing posture thresholds or presenting stronger investment conclusions.
+4. Add outcome/backtest evaluation before changing posture thresholds or treating the qualitative AI stance as a validated return signal.
 
 Do not add trade execution or personalized recommendations without a separate product, security, legal, and broker-integration design.
 
@@ -293,4 +312,4 @@ Do not add trade execution or personalized recommendations without a separate pr
 - [`PROJECT_SPEC.md`](PROJECT_SPEC.md) — stable product and analytical requirements.
 - [`PROJECT_CONTEXT_AND_PROGRESS.md`](PROJECT_CONTEXT_AND_PROGRESS.md) — detailed implementation, test, Git, and handoff state.
 
-Official implementation references used for this phase include the [MCP Python SDK documentation](https://py.sdk.modelcontextprotocol.io/), [OpenAI Responses and Structured Outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs), [Twelve Data API documentation](https://twelvedata.com/docs), and [SEC developer resources](https://www.sec.gov/about/developer-resources).
+Official implementation references used for this phase include the [MCP Python SDK documentation](https://py.sdk.modelcontextprotocol.io/), [OpenAI latest-model guide](https://developers.openai.com/api/docs/guides/latest-model), [OpenAI Structured Outputs documentation](https://developers.openai.com/api/docs/guides/structured-outputs), [OpenAI reasoning best practices](https://developers.openai.com/api/docs/guides/reasoning-best-practices), [Twelve Data API documentation](https://twelvedata.com/docs), and [SEC developer resources](https://www.sec.gov/about/developer-resources).
