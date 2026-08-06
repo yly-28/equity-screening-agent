@@ -84,6 +84,70 @@ def _detail(
     }
 
 
+def _detail_with_analysis_evidence() -> dict[str, object]:
+    detail = _detail()
+    detail["market_snapshot"] = {
+        "price": 125.5,
+        "market_cap_proxy": 62_750_000_000.0,
+        "average_volume_20d": None,
+        "provider_payload": {"must": "not leak"},
+    }
+    detail["market_features"] = [
+        {
+            "field": field_name,
+            "label": field_name.replace("_", " ").title(),
+            "value": None if field_name == "beta_1y" else index / 10,
+            "unit": "ratio",
+        }
+        for index, field_name in enumerate(
+            (
+                "return_1d",
+                "beta_1y",
+                "return_6m",
+                "volatility_20d",
+                "return_1m",
+                "max_drawdown_1y",
+                "relative_strength_3m",
+                "return_3m",
+                "volatility_60d",
+            )
+        )
+    ]
+    detail["fundamentals"] = {
+        "source": "sec_companyfacts",
+        "latest_period_end": "2025-12-31",
+        "latest_filed_date": "2026-02-15",
+        "fundamental_age_days": 194,
+        "metrics": [
+            {
+                "field": field_name,
+                "label": field_name.replace("_", " ").title(),
+                "value": None if field_name == "annual_pe_proxy" else index + 0.25,
+                "unit": "USD" if field_name.startswith("annual_") else "decimal_ratio",
+                "period_end": "2025-12-31",
+                "period_field": "fundamental_period_end",
+                "source_tag": "SyntheticTag",
+                "warning": "missing_proxy" if field_name == "annual_pe_proxy" else None,
+            }
+            for index, field_name in enumerate(
+                (
+                    "profit_margin_raw",
+                    "annual_pe_proxy",
+                    "liabilities_to_equity",
+                    "annual_revenue",
+                    "free_cash_flow_margin",
+                    "annual_net_income",
+                    "revenue_growth",
+                    "roe",
+                    "annual_free_cash_flow",
+                    "profit_margin",
+                )
+            )
+        ],
+    }
+    return detail
+
+
 def test_report_calls_only_stock_detail_and_returns_concise_versioned_schema(
     monkeypatch,
 ) -> None:
@@ -100,7 +164,7 @@ def test_report_calls_only_stock_detail_and_returns_concise_versioned_schema(
 
     assert calls == [{"ticker": " aaa ", "mode": "balanced"}]
     assert result["service"] == "get_research_report"
-    assert result["schema_version"] == "1.0.0"
+    assert result["schema_version"] == "1.1.0"
     assert result["ticker"] == "AAA"
     assert result["research_posture"]["classification"] == "strong"
     assert result["research_posture"]["selected_mode_score"] == 82.5
@@ -109,11 +173,68 @@ def test_report_calls_only_stock_detail_and_returns_concise_versioned_schema(
     assert len(result["next_research_questions"]) == 4
     assert result["factor_scores"]["valuation"] is None
     assert result["quality"]["missing_inputs"] == ["annual_pe_proxy"]
+    assert result["analysis_evidence"] == {
+        "schema_version": "1.0.0",
+        "market_snapshot": {},
+        "market_signals": [],
+        "fundamentals": {},
+    }
     assert "not financial advice" in result["disclaimer"]
     assert "not a buy, sell, hold" in result["research_posture"]["meaning"]
     json.dumps(result, allow_nan=False)
 
     assert detail["strengths"][3]["code"] == "strength:3"
+
+
+def test_report_projects_fixed_analysis_evidence_without_recomputing(
+    monkeypatch,
+) -> None:
+    detail = _detail_with_analysis_evidence()
+    monkeypatch.setattr(
+        research_report,
+        "get_stock_detail_service",
+        lambda **kwargs: detail,
+    )
+
+    result = research_report.get_research_report("AAA")
+    evidence = result["analysis_evidence"]
+
+    assert evidence["schema_version"] == "1.0.0"
+    assert evidence["market_snapshot"] == {
+        "price": 125.5,
+        "market_cap_proxy": 62_750_000_000.0,
+        "average_volume_20d": None,
+    }
+    assert [item["field"] for item in evidence["market_signals"]] == list(
+        research_report.MARKET_SIGNAL_FIELDS
+    )
+    assert "return_1d" not in {
+        item["field"] for item in evidence["market_signals"]
+    }
+    assert [item["field"] for item in evidence["fundamentals"]["metrics"]] == list(
+        research_report.FUNDAMENTAL_EVIDENCE_FIELDS
+    )
+    assert "profit_margin_raw" not in {
+        item["field"] for item in evidence["fundamentals"]["metrics"]
+    }
+    annual_pe = next(
+        item
+        for item in evidence["fundamentals"]["metrics"]
+        if item["field"] == "annual_pe_proxy"
+    )
+    assert annual_pe["value"] is None
+    assert annual_pe["unit"] == "USD"
+    assert annual_pe["period_end"] == "2025-12-31"
+    assert annual_pe["source_tag"] == "SyntheticTag"
+    assert annual_pe["warning"] == "missing_proxy"
+
+    detail["market_snapshot"]["price"] = 0.0
+    detail["market_features"][1]["value"] = 999.0
+    detail["fundamentals"]["metrics"][1]["warning"] = "changed"
+    assert evidence["market_snapshot"]["price"] == 125.5
+    assert evidence["market_signals"][-1]["value"] is None
+    assert annual_pe["warning"] == "missing_proxy"
+    json.dumps(result, allow_nan=False)
 
 
 @pytest.mark.parametrize(

@@ -10,7 +10,40 @@ from numbers import Real
 from src.stock_detail import get_stock_detail as get_stock_detail_service
 
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
+ANALYSIS_EVIDENCE_SCHEMA_VERSION = "1.0.0"
+MARKET_SNAPSHOT_FIELDS = (
+    "price",
+    "market_cap_proxy",
+    "average_volume_20d",
+)
+MARKET_SIGNAL_FIELDS = (
+    "return_1m",
+    "return_3m",
+    "return_6m",
+    "relative_strength_3m",
+    "volatility_20d",
+    "volatility_60d",
+    "max_drawdown_1y",
+    "beta_1y",
+)
+FUNDAMENTAL_EVIDENCE_FIELDS = (
+    "annual_revenue",
+    "annual_net_income",
+    "revenue_growth",
+    "profit_margin",
+    "roe",
+    "annual_free_cash_flow",
+    "free_cash_flow_margin",
+    "liabilities_to_equity",
+    "annual_pe_proxy",
+)
+FUNDAMENTAL_EVIDENCE_METADATA_FIELDS = (
+    "source",
+    "latest_period_end",
+    "latest_filed_date",
+    "fundamental_age_days",
+)
 DISCLAIMER = (
     "This output is generated for educational and research purposes only. "
     "It is not financial advice, investment advice, or a recommendation to "
@@ -108,6 +141,73 @@ def _summary(
     )
 
 
+def _project_metric_rows(
+    value: object,
+    fields: Sequence[str],
+    label: str,
+) -> list[dict[str, object]]:
+    if value is None:
+        return []
+    rows = _list(value, label)
+    selected_fields = set(fields)
+    rows_by_field: dict[str, dict[str, object]] = {}
+    for index, row in enumerate(rows):
+        normalized = _mapping(row, f"{label}[{index}]")
+        field_name = normalized.get("field")
+        if field_name not in selected_fields:
+            continue
+        if field_name in rows_by_field:
+            raise ResearchReportDataError(
+                f"Stock Detail {label} contains duplicate field {field_name}"
+            )
+        rows_by_field[str(field_name)] = deepcopy(dict(normalized))
+    return [rows_by_field[field] for field in fields if field in rows_by_field]
+
+
+def _analysis_evidence(detail: Mapping[str, object]) -> dict[str, object]:
+    market_snapshot_value = detail.get("market_snapshot")
+    market_snapshot: dict[str, object] = {}
+    if market_snapshot_value is not None:
+        source_market_snapshot = _mapping(
+            market_snapshot_value,
+            "market_snapshot",
+        )
+        market_snapshot = {
+            field_name: deepcopy(
+                source_market_snapshot[field_name]
+            )
+            for field_name in MARKET_SNAPSHOT_FIELDS
+            if field_name in source_market_snapshot
+        }
+    market_signals = _project_metric_rows(
+        detail.get("market_features"),
+        MARKET_SIGNAL_FIELDS,
+        "market_features",
+    )
+
+    fundamentals_value = detail.get("fundamentals")
+    fundamentals: dict[str, object] = {}
+    if fundamentals_value is not None:
+        source_fundamentals = _mapping(fundamentals_value, "fundamentals")
+        fundamentals = {
+            field_name: deepcopy(source_fundamentals[field_name])
+            for field_name in FUNDAMENTAL_EVIDENCE_METADATA_FIELDS
+            if field_name in source_fundamentals
+        }
+        fundamentals["metrics"] = _project_metric_rows(
+            source_fundamentals.get("metrics"),
+            FUNDAMENTAL_EVIDENCE_FIELDS,
+            "fundamentals.metrics",
+        )
+
+    return {
+        "schema_version": ANALYSIS_EVIDENCE_SCHEMA_VERSION,
+        "market_snapshot": market_snapshot,
+        "market_signals": market_signals,
+        "fundamentals": fundamentals,
+    }
+
+
 def get_research_report(
     ticker: str,
     mode: str = "balanced",
@@ -170,6 +270,7 @@ def get_research_report(
             classification,
             score,
         ),
+        "analysis_evidence": _analysis_evidence(detail),
         "factor_scores": deepcopy(dict(factor_scores)),
         "strengths": deepcopy(strengths),
         "risks": deepcopy(risks),
